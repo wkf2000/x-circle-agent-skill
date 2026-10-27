@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Render the "X 宇宙" constellation from data.json (written by browser/export.js).
+// Render the "X 宇宙" constellation from data.json (written by collect.mjs export).
 //
 //   node render.mjs <data.json> [--out <dir>] [--video] [--no-music] [--name <显示名>]
 //
-// data.json comes from browser/export.js. Writes <out>/x-universe.png (1080x1350 @2x) and, with --video, <out>/x-universe.mp4
+// data.json comes from `collect.mjs export`. Writes <out>/x-universe.png (1080x1350 @2x) and, with --video, <out>/x-universe.mp4
 // (1080x1920, 15s, with a generated soundtrack synced to the animation unless --no-music).
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
@@ -45,10 +45,10 @@ function zoned(iso, tz) {
 const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
 
 // ---------- data -> model ----------
-// data.json is the compact v2 shape written by browser/export.js: only the people who are drawn,
+// data.json is the compact v2 shape written by `collect.mjs export`: only the people who are drawn,
 // with per-type counts, plus totals and timestamps (epoch seconds).
 export function buildModel(data, opts = {}) {
-  if (data.v !== 2) throw new Error('data.json must come from browser/export.js (v2)');
+  if (data.v !== 2) throw new Error('data.json must come from collect.mjs export (v2)');
   const tz = data.tz || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const startMs = Date.parse(data.start), endMs = Date.parse(data.end);
   const iso = (s) => new Date(s * 1000).toISOString();

@@ -10,7 +10,7 @@
 - The corners hold the week's likes, replies, reposts and new followers. Below the map are the top post with the people who lit it up and the brightest hour (最闪耀时刻).
 - Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one. A soft generated soundtrack follows along, with a chime for each star as it lights up. Pass `--no-music` for a silent video.
 
-All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. No API keys are needed and nothing is posted for you.
+All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. The page script only reads what is on screen, and progress is kept in a local file, never in x.com's storage. No API keys are needed and nothing is posted for you.
 
 ## Install
 
@@ -21,7 +21,7 @@ npx skills add wkf2000/x-circle-agent-skill
 Requirements:
 - Node 18+ and Google Chrome (or Edge / Chromium) for rendering
 - `ffmpeg` for the optional video
-- An agent with a browser it can drive, e.g. the Claude desktop app's built-in browser or Claude in Chrome, logged in to x.com
+- An agent whose browser can open pages, scroll and run read-only JavaScript, logged in to x.com. This works in Claude Code (built-in browser or Claude in Chrome), Codex (in-app browser) and other harnesses.
 
 ## Use
 
@@ -31,7 +31,7 @@ Ask your agent:
 
 > Make my X universe for this week, with a video
 
-The agent visits your profile, each post from the past week (replies, likes, reposts, quotes) and your notifications. It then writes `./x-universe/<date>/x-universe.png` (and `.mp4`).
+The agent visits your profile, your notifications and your most engaged posts from the past week (replies, likes, reposts, quotes). A small local CLI (`collect.mjs`) tells it which page to open next and keeps the results. It then writes `./x-universe/<date>/x-universe.png` (and `.mp4`).
 
 ## Try the renderer without X
 

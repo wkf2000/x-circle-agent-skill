@@ -1,6 +1,6 @@
 ---
 name: x-circle-agent-skill
-description: Turns the past 7 days of an X (Twitter) account into a shareable constellation poster titled "[Name] 和朋友们的 X 宇宙" — everyone who liked, reposted, replied or newly followed the user placed as stars on orbits around them (closer = more engaged), an hour-by-hour week dial, weekly stats, the brightest hour, and the week's top post. Optionally renders a 15-second 9:16 video. Collects data read-only by browsing x.com in the built-in browser, or Claude in Chrome as a fallback. Use when the user asks for their X/Twitter weekly interaction map, "X 宇宙", "x circle", a thank-you image for followers, who interacted with them this week, or a weekly X recap image/video.
+description: Turns the past 7 days of an X (Twitter) account into a shareable constellation poster titled "[Name] 和朋友们的 X 宇宙" — everyone who liked, reposted, replied or newly followed the user placed as stars on orbits around them (closer = more engaged), an hour-by-hour week dial, weekly stats, the brightest hour, and the week's top post. Optionally renders a 15-second 9:16 video. Works in any agent harness (Claude Code, Codex and others) whose browser can navigate, scroll and evaluate read-only JavaScript on x.com, where the user is already logged in. Use when the user asks for their X/Twitter weekly interaction map, "X 宇宙", "x circle", a thank-you image for followers, who interacted with them this week, or a weekly X recap image/video.
 ---
 
 # X 宇宙 (x-circle)
@@ -18,32 +18,45 @@ Produces `x-universe.png` (1080×1350, rendered @2x) and, when asked, `x-univers
 
 ## 2. Pick a browser
 
-- Use the **built-in browser** (`mcp__Claude_Browser__*`: `navigate`, `javascript_tool`) if available.
-- Otherwise fall back to **Claude in Chrome** (`mcp__claude-in-chrome__*`: `navigate`, `javascript_tool`). Load its tools in one ToolSearch call.
-- The user must already be logged in to x.com there. If the collector reports "Not logged in", ask the user to log in in that browser, then continue. Never type credentials yourself.
+Use whatever browser your harness gives you that is logged in to x.com. It needs three abilities:
 
-This skill is **read-only**. Only navigate and run the provided scripts. Never click like/follow/repost/reply, never post, never change settings. (The collector itself only scrolls, and clicks X's own "Retry" button when a timeline fails to load.)
+| Ability | Examples |
+|---|---|
+| open a URL | `navigate`, `browser_navigate`, `open_url` |
+| scroll the page | a scroll / mouse-wheel action, or pressing `PageDown` |
+| run JavaScript and get the value back (read-only is enough) | `javascript_tool`, `evaluate`, `browser_evaluate` |
+
+Prefer the harness's own in-app browser. In Claude Code that is the built-in browser (`mcp__Claude_Browser__*`), falling back to Claude in Chrome (`mcp__claude-in-chrome__*`). In Codex, use its in-app browser. If the browser's tools are deferred, load them all in one go before starting.
+
+The user must already be logged in to x.com there. If `collect.mjs` reports "Not logged in", ask the user to log in in that browser, then continue. Never type credentials yourself.
+
+This skill is **read-only**. Only navigate, scroll and run `extract.js`. Never click like/follow/repost/reply, never post, never change settings. The one exception is X's own "Retry" button, which you may click when the CLI says X is showing it.
 
 ## 3. Collect
 
-State lives in x.com's `localStorage` (key `xcircle:v1`), so stay on x.com in one tab. Expect roughly 15–30 page visits and 5–15 minutes for an active account.
+The browser only *reads*. Everything else (progress, de-duplication, which page is next) lives on disk, in `<out>/collect-state.json`, and is handled by `SKILL_DIR/scripts/collect.mjs`. Nothing is written to x.com's storage. Every `collect.mjs` command prints one JSON line. Its `do` field tells you what to do next.
 
-1. Navigate to `https://x.com/home`, then reset leftovers from an earlier run with `localStorage.removeItem('xcircle:v1'); 'reset'`.
-2. **First run:** read `SKILL_DIR/scripts/browser/collect.js` and pass its full contents to `javascript_tool`, prefixed with `await ` (the file is one async expression). It finds the logged-in handle itself and stores its own source in `localStorage`.
-3. **Every later run** (after each navigation, wait ~2s, then) use this short loader. x.com's CSP blocks `eval`, but allows a script that carries the page's nonce:
-   ```js
-   const s=document.createElement('script'); s.nonce=document.querySelector('script[nonce]')?.nonce; s.textContent='window.__xc='+localStorage.getItem('xcircle:src'); document.head.appendChild(s); s.remove(); await window.__xc
-   ```
-   If it fails (e.g. `localStorage` was cleared), paste the full file again as in step 2.
-4. Each run returns JSON: `{ok, page, added, done, totals, todoCount, next}`.
-   - `done: false` → run the loader again on the same page. The collector tracks its own run budget per page (3, or 8 for `/notifications`) and drops the page from the list when the budget is used up.
-   - `blocked` → X is rate-limiting that timeline. Data so far is kept; move on.
-   - Otherwise navigate to `next[0]` and run again. Stop when `todoCount` is 0.
-   - Order: profile → replies tab → notifications → mentions → followers → the 10 most engaged posts (replies, `/likes`, `/retweets`, `/quotes`).
-5. Keep the user posted in one short line every few pages (e.g. "已收集 8/20 个页面，找到 140 位朋友").
-6. **Export:** pass `SKILL_DIR/scripts/browser/export.js` (full contents) to `javascript_tool`. It returns a compact JSON string (~10–30 KB) holding only the people who will be drawn, plus totals and timestamps. Write it unchanged to `<out>/data.json`.
+1. **Start:** `node "SKILL_DIR/scripts/collect.mjs" start --out "<out>"`. Add `--fresh` to discard an earlier run less than 6 hours old (by default it is resumed). The time zone defaults to this machine's. Override it with `--tz Asia/Shanghai`.
+2. **Loop** until `do` is `"export"`:
+   - `"goto"` → open `next` in the browser, wait about 2 seconds, then extract.
+   - `"scroll"` → scroll down about one screen (one `PageDown`, or a mouse-wheel scroll of similar size), wait about 1.5 seconds, then extract.
+   - **Extract:** read `SKILL_DIR/scripts/browser/extract.js` once and keep its text. Pass the whole file to the browser's JavaScript tool. Its last line is `})({ scroll: 0 })`. Replace `{ scroll: 0 }` with the `opts` string from the last `collect.mjs` output, if it gave one, so that only new items come back. If the tool wants a function rather than an expression, wrap it as `() => <file text>`.
+   - **Add** the returned object, unchanged, to the state:
+     ```bash
+     node "SKILL_DIR/scripts/collect.mjs" add --out "<out>" <<'XC_PAYLOAD'
+     <the JSON object extract.js returned>
+     XC_PAYLOAD
+     ```
+     Alternatively, write it to a file and pass the path after `--out "<out>"`.
+   - `warn` means items were probably skipped. Scroll by smaller steps from then on. `blocked` means X is rate-limiting that page. Follow its text (click Retry once, or move on). If a page will not load at all, run `collect.mjs skip --out "<out>" <url>`.
+   - Keep the user posted in one short line every few pages (e.g. "已收集 8/20 个页面，找到 140 位朋友"), using `todo` and `totals`.
+3. **Export:** `node "SKILL_DIR/scripts/collect.mjs" export --out "<out>"` writes `<out>/data.json`.
 
-What each page contributes (the collector detects the page from its URL):
+**Faster, where allowed:** if the browser's JavaScript tool can await async code and lets scripts scroll the page (Claude Code's tools can), use `{ scroll: 12 }` instead. `extract.js` then scrolls up to 12 screens itself and returns everything it saw. In this mode, skip the separate scroll step and the `opts` string. Run it again whenever `do` is `"scroll"`. If the tool rejects async code or the page does not move, go back to `{ scroll: 0 }`.
+
+Expect roughly 15–30 pages for an active account. Each page takes 1–3 extracts in auto-scroll mode, or a few more when scrolling by hand.
+
+What each page contributes (`extract.js` and `collect.mjs` detect the page from its URL):
 
 | Page | Data |
 |---|---|
@@ -94,8 +107,8 @@ The script prints a one-line summary and writes `model.json` (what was drawn) ne
 
 ## Files
 
-- `scripts/browser/collect.js` – page-aware collector, run in the browser
-- `scripts/browser/export.js` – aggregates collected data into `data.json`
+- `scripts/browser/extract.js` – read-only page reader, run in the browser. It returns what the page shows and never writes storage or clicks.
+- `scripts/collect.mjs` – local collector CLI: state on disk, de-duplication, what to visit next, export to `data.json`
 - `scripts/render.mjs` – builds the model, inlines avatars, renders PNG/MP4 via headless Chrome + ffmpeg
 - `scripts/template.html` – the SVG constellation (poster and story layouts, frame-by-frame animation, soundtrack cues)
 - `scripts/music.mjs` – synthesizes the video's soundtrack from those cues (WAV, muxed by ffmpeg)

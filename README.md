@@ -9,7 +9,7 @@
 - An outer dial traces the week hour by hour: friends' activity points outward, yours points inward, and the brightest hour is marked.
 - The corners hold the week's likes, replies, reposts and new followers. Below the map are the top post with the people who lit it up and the brightest hour (最闪耀时刻).
 - Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one. A soft generated soundtrack follows along, with a chime for each star as it lights up. Pass `--no-music` for a silent video.
-- Three looks: 星空 (starry, default), 极光 (aurora) and 晨曦 (dawn, light). Ask for a different style, an English version, a custom title, hidden numbers, or leaving out spam accounts, and the agent re-renders in seconds.
+- Three looks, and simple ways to make it yours (see [Themes and options](#themes-and-options)).
 
 All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. The page script only reads what is on screen, and progress is kept in a local file, never in x.com's storage. No API keys are needed and nothing is posted for you.
 
@@ -34,6 +34,24 @@ Ask your agent:
 
 The agent visits your profile, your notifications and your most engaged posts from the past week (replies, likes, reposts, quotes). A small local CLI (`collect.mjs`) tells it which page to open next and keeps the results. It then writes `./x-universe/<date>/x-universe.png` (and `.mp4`).
 
+## Themes and options
+
+![themes](docs/themes.jpg)
+
+The default is 星空 (starry). Once your map is made, just tell the agent what you'd like changed. It re-renders in seconds without visiting X again.
+
+| Say something like | What changes |
+|---|---|
+| 换成极光 / 用晨曦风格 | Theme: 星空 `starry`, 极光 `aurora`, 晨曦 `dawn` (light) |
+| 给我看看三种风格 | A side-by-side preview of all three, like the one above |
+| 做个英文版 | All text on the image in English |
+| 标题改成「…」 / 结尾换成「…」 | Custom title, subtitle, name, or the video's closing line |
+| 不要显示获赞数 | Hide any of likes, replies, reposts, new followers, posts |
+| 去掉 @xxx | Leave accounts (spam, bots) off the map; the next friends move up |
+| 视频短一点 / 不要音乐 | Video length from 8 to 30 seconds; silent video |
+
+The agent also points out accounts that look like spam and asks before leaving them out.
+
 ## Try the renderer without X
 
 ```bash
@@ -41,6 +59,7 @@ cd skills/x-circle-agent-skill/scripts
 npm install
 node render.mjs ../assets/sample-data.json --out /tmp/x-universe --video
 node render.mjs ../assets/sample-data.json --out /tmp/x-universe --preview-themes   # all three themes side by side
+node render.mjs ../assets/sample-data.json --out /tmp/x-universe --theme dawn --lang en
 ```
 
 ## Notes

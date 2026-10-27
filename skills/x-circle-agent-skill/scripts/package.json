@@ -1,0 +1,13 @@
+{
+  "name": "x-circle-render",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renders the X 宇宙 constellation image/video for the x-circle-agent-skill",
+  "scripts": {
+    "sample": "node render.mjs ../assets/sample-data.json --out ../../../sample-output"
+  },
+  "dependencies": {
+    "playwright-core": "^1.60.0"
+  }
+}

@@ -64,6 +64,8 @@ node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>"            #
 node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>" --video    # image + video (~30s to render)
 ```
 
+The video comes with a short generated soundtrack synced to the animation. Add `--no-music` if the user wants it silent (for example, to add their own music).
+
 `--name <显示名>` overrides the name in the title. Use it when the user wants a different display name or theirs is very long. Chrome is found automatically. Set `CHROME_PATH` if it lives elsewhere, or run `npx playwright install chromium`.
 
 The script prints a one-line summary and writes `model.json` (what was drawn) next to the outputs.
@@ -84,11 +86,17 @@ The script prints a one-line summary and writes `model.json` (what was drawn) ne
 - Star color = deepest interaction: blue reply/mention, purple quote, green repost, pink like, gold new follower. ✦ marks new followers.
 - Stats (发帖 / 获赞 / 转发 / 回复) are X's own counters summed over the week's posts. 新关注 is the total from follow notifications. The poster puts four of them in the corners, with 发帖 in the subtitle. The story video shows all five in a row.
 - Video: a radar sweep circles the dial once (one turn = the week). Bars grow and stars appear as it passes, then new followers ripple out onto the halo, and it closes with 「谢谢你们，照亮了我的一周」.
+- Music (`scripts/music.mjs`) is synthesized from the animation's own cue times, so there are no samples or licensing concerns:
+  - a soft pad that changes chord with each section
+  - a bell for each star as it appears, panned to its side of the map, pitched by ring
+  - a harp-like run for the new followers and a low swell under the ripple
+  - a resolving chord on the thank-you
 
 ## Files
 
 - `scripts/browser/collect.js` – page-aware collector, run in the browser
 - `scripts/browser/export.js` – aggregates collected data into `data.json`
 - `scripts/render.mjs` – builds the model, inlines avatars, renders PNG/MP4 via headless Chrome + ffmpeg
-- `scripts/template.html` – the SVG constellation (poster and story layouts, frame-by-frame animation)
+- `scripts/template.html` – the SVG constellation (poster and story layouts, frame-by-frame animation, soundtrack cues)
+- `scripts/music.mjs` – synthesizes the video's soundtrack from those cues (WAV, muxed by ffmpeg)
 - `assets/sample-data.json` – fictional sample. Try the renderer with `node scripts/render.mjs assets/sample-data.json --out /tmp/xu`

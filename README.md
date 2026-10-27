@@ -8,7 +8,7 @@
 - New followers shine on the gold outer halo with a ✦.
 - An outer dial traces the week hour by hour: friends' activity points outward, yours points inward, and the brightest hour is marked.
 - The corners hold the week's likes, replies, reposts and new followers. Below the map are the top post with the people who lit it up and the brightest hour (最闪耀时刻).
-- Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one.
+- Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one. A soft generated soundtrack follows along, with a chime for each star as it lights up. Pass `--no-music` for a silent video.
 
 All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. No API keys are needed and nothing is posted for you.
 

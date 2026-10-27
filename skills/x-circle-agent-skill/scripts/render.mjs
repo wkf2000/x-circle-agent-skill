@@ -1,29 +1,33 @@
 #!/usr/bin/env node
 // Render the "X 宇宙" constellation from data.json (written by browser/export.js).
 //
-//   node render.mjs <data.json> [--out <dir>] [--video] [--name <显示名>]
+//   node render.mjs <data.json> [--out <dir>] [--video] [--no-music] [--name <显示名>]
 //
-// data.json comes from browser/export.js. Writes <out>/x-universe.png (1080x1350 @2x) and, with --video, <out>/x-universe.mp4 (1080x1920, 15s).
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+// data.json comes from browser/export.js. Writes <out>/x-universe.png (1080x1350 @2x) and, with --video, <out>/x-universe.mp4
+// (1080x1920, 15s, with a generated soundtrack synced to the animation unless --no-music).
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { compose } from './music.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FPS = 30;
 const RING_SIZES = { inner: 8, middle: 16, outer: 28, halo: 24 };
 
 function parseArgs(argv) {
-  const args = { input: null, out: null, video: false, name: null };
+  const args = { input: null, out: null, video: false, music: true, name: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--video') args.video = true;
+    else if (a === '--no-music') args.music = false;
     else if (a === '--out') args.out = argv[++i];
     else if (a === '--name') args.name = argv[++i];
     else if (!a.startsWith('--')) args.input = a;
   }
   if (!args.input) {
-    console.error('usage: node render.mjs <data.json> [--out <dir>] [--video] [--name <显示名>]');
+    console.error('usage: node render.mjs <data.json> [--out <dir>] [--video] [--no-music] [--name <显示名>]');
     process.exit(2);
   }
   args.out ||= path.dirname(path.resolve(args.input));
@@ -206,9 +210,16 @@ async function renderImage(browser, model, file) {
   await page.close();
 }
 
-async function renderVideo(browser, model, file) {
+async function renderVideo(browser, model, file, music) {
   const { page, info } = await openStage(browser, model, 'story', 1);
-  const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-',
+  let wav = null;
+  const audioArgs = [];
+  if (music) {
+    wav = path.join(os.tmpdir(), `x-universe-${process.pid}.wav`);
+    await writeFile(wav, compose(info.events, info.T, info.duration));
+    audioArgs.push('-i', wav, '-map', '0:v', '-map', '1:a', '-c:a', 'aac', '-b:a', '192k', '-shortest');
+  }
+  const ffmpeg = spawn('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', ...audioArgs,
     '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '18', '-preset', 'medium', '-movflags', '+faststart', file], { stdio: ['pipe', 'inherit', 'inherit'] });
   const exited = new Promise((resolve, reject) => {
     ffmpeg.on('error', (e) => reject(e.code === 'ENOENT' ? new Error('ffmpeg not found. Install it (macOS: brew install ffmpeg) to render video.') : e));
@@ -222,7 +233,7 @@ async function renderVideo(browser, model, file) {
     if (f % FPS === 0) process.stdout.write(`\rvideo ${Math.round((f / frames) * 100)}%`);
   }
   ffmpeg.stdin.end();
-  await exited;
+  try { await exited; } finally { if (wav) await rm(wav, { force: true }); }
   process.stdout.write('\rvideo 100%\n');
   await page.close();
 }
@@ -242,7 +253,7 @@ async function main() {
     console.log('image: ' + png);
     if (args.video) {
       const mp4 = path.join(args.out, 'x-universe.mp4');
-      await renderVideo(browser, model, mp4);
+      await renderVideo(browser, model, mp4, args.music);
       console.log('video: ' + mp4);
     }
   } finally {

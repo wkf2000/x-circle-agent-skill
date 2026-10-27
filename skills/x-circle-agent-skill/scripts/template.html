@@ -80,6 +80,9 @@
 
   let anims = [];
   const anim = (fn) => anims.push(fn);
+  // Moments the soundtrack follows (video only): { t, type, ring?, w?, pan? }
+  let events = [];
+  const cue = (e) => events.push(e);
 
   function avatar(parent, r, url, name, seed, defs) {
     if (url) {
@@ -162,7 +165,7 @@
     const L = LAYOUTS[layoutName];
     const video = layoutName === 'story';
     const { W, H, cx, cy } = L;
-    anims = [];
+    anims = []; events = [];
     const svg = document.getElementById('stage');
     svg.innerHTML = '';
     svg.setAttribute('width', W); svg.setAttribute('height', H);
@@ -295,7 +298,7 @@
         const pk = el('g', { transform: `translate(${x} ${y})` }, dialL);
         el('circle', { r: 9, fill: 'url(#glow-follow)' }, pk);
         sparkle(pk, 0, 0, 6, C.gold, 1);
-        if (video) { const t0 = sweepTime(a) + 0.3; anim((t) => pk.setAttribute('opacity', prog(t, t0, 0.4))); }
+        if (video) { const t0 = sweepTime(a) + 0.3; anim((t) => pk.setAttribute('opacity', prog(t, t0, 0.4))); cue({ t: t0, type: 'peak', pan: (x - cx) / W * 2 }); }
       }
     }
 
@@ -323,6 +326,10 @@
       const l = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#ece8ff', 'stroke-width': 0.8, opacity: op, 'stroke-dasharray': dash }, lineL);
       if (video) { const t0 = Math.max(a.t0, b.t0) + 0.2; anim((t) => l.setAttribute('opacity', op * prog(t, t0, 0.5))); }
     };
+    if (video) {
+      cue({ t: 0.9, type: 'me' }); cue({ t: T.halo - 0.2, type: 'ripple' }); cue({ t: T.thanks, type: 'thanks' });
+      Object.entries(placed).forEach(([ring, list]) => list.forEach((s) => cue({ t: s.t0, type: ring === 'halo' ? 'halo' : 'star', ring, w: s.weight || 0, pan: (s.x - cx) / W * 2 })));
+    }
     const meNode = { x: cx, y: cy, t0: 1.2 };
     placed.inner.forEach((s) => line(meNode, s, 0.2));
     const ring1 = [...placed.inner].sort((a, b) => a.a - b.a);
@@ -484,7 +491,7 @@
       anim((t) => curtain.setAttribute('opacity', 1 - prog(t, 0, 0.7)));
     }
 
-    return { duration: T.end, width: W, height: H };
+    return { duration: T.end, width: W, height: H, T, events: events.sort((a, b) => a.t - b.t) };
   }
 
   function sparkle(parent, x, y, s, color, op) {

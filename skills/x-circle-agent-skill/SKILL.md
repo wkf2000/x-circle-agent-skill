@@ -77,9 +77,20 @@ node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>"            #
 node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>" --video    # image + video (~30s to render)
 ```
 
-The video comes with a short generated soundtrack synced to the animation. Add `--no-music` if the user wants it silent (for example, to add their own music).
+Chrome is found automatically. Set `CHROME_PATH` if it lives elsewhere, or run `npx playwright install chromium`.
 
-`--name <显示名>` overrides the name in the title. Use it when the user wants a different display name or theirs is very long. Chrome is found automatically. Set `CHROME_PATH` if it lives elsewhere, or run `npx playwright install chromium`.
+**Customizing.** Use the defaults unless the user asks for something. Turn what they say into these flags and re-render, which takes seconds since no re-collecting is needed:
+
+| The user says | Flag |
+|---|---|
+| 换个风格 / 极光 / 晨曦 / a lighter look | `--theme starry` (星空, default) · `aurora` (极光) · `dawn` (晨曦, light). Chinese names work too. |
+| 想看看有哪些风格 | `--preview-themes` also writes `themes.png` with all three side by side |
+| English / 英文 | `--lang en` (default `zh`) |
+| 换个称呼 / 改标题 / 改副标题 | `--name`, `--title`, `--subtitle` (a custom title still highlights "X 宇宙" if it contains it) |
+| 视频结尾换句话 | `--thanks "<text>"` |
+| 不想显示获赞数… | `--hide likes,replies,reposts,followers,posts` (any of them) |
+| 去掉某些账号（机器人、刷粉号） | `--exclude handle1,handle2`; the next people move up to fill the rings |
+| 视频短一点 / 静音 | `--seconds 10` (8–30, default 15) · `--no-music` |
 
 The script prints a one-line summary and writes `model.json` (what was drawn) next to the outputs.
 
@@ -87,6 +98,8 @@ The script prints a one-line summary and writes `model.json` (what was drawn) ne
 
 1. Look at the PNG yourself before showing it. If something is off (names overlapping, empty map), check `model.json` and the collection totals rather than guessing.
 2. Show the user the image (and video) with a 2–3 line summary: number of people, top post, most active time, new followers. If any page reported `blocked`, say in one line that X rate-limited part of the history, so the earliest days are thinner.
+   - Add one line on customizing, e.g. 「还有极光、晨曦两种风格，也可以改标题、隐藏数字或去掉某些账号，告诉我就行。」
+   - If some names on the map look like spam or bot accounts (e.g. crypto promo names, follow-for-follow groups), list them in that line and offer `--exclude`. Never exclude anyone without asking.
 3. Offer a ready-to-paste Chinese caption that thanks the people in the map, e.g.
    「这一周，有 56 颗星照亮了我的 X 宇宙 ✨ 谢谢每一位点赞、转发、回复和新关注的朋友，下周继续相遇！」
    Do not post it. Posting is the user's call.

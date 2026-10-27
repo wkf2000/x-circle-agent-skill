@@ -16,12 +16,56 @@
   const SERIF = '"Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif';
   const NUM = '"Avenir Next", "Helvetica Neue", "Segoe UI", ' + SANS;
   const NS = 'http://www.w3.org/2000/svg';
-  const C = {
-    like: '#ff8fb8', repost: '#6fe3bd', reply: '#93c8ff', quote: '#c6a8ff', mention: '#93c8ff', follow: '#f3d08a',
-    gold: '#f3d08a', text: '#f5f1e8', soft: 'rgba(245,241,232,0.84)', muted: 'rgba(228,224,240,0.56)', dim: 'rgba(228,224,240,0.34)',
-    me: '#f3d08a', circle: '#c4e0ff',
+  // Three looks on one layout. A theme sets the colors, the title font and how the sky is painted.
+  const THEMES = {
+    starry: { // 星空: deep night sky, champagne gold
+      bg: '#04050b', text: '#f5f1e8', soft: 'rgba(245,241,232,0.84)', muted: 'rgba(228,224,240,0.56)', dim: 'rgba(228,224,240,0.34)',
+      accent: '#f3d08a', grad: ['#fff3d6', '#f3d08a', '#d6a25e'], line: '#e8e4ff', circle: '#c4e0ff', spark: ['#ffe7c2', '#e6ebff'], spike: '#ffffff',
+      like: '#ff8fb8', repost: '#6fe3bd', reply: '#93c8ff', quote: '#c6a8ff', glow: 0.34, sun: ['#ffd796', 0.42], title: SERIF,
+      sky: { core: ['30,36,92', 0.55], warm: ['255,196,120', 0.07], angle: -0.56, tones: [['118,88,255', 0.11], ['70,160,235', 0.09], ['255,168,120', 0.05], ['196,110,255', 0.07], ['120,210,255', 0.05]],
+        dust: ['255,232,205', '222,228,255'], dustA: 1, lanes: 0.45, stars: ['255,226,190', '200,220,255', '238,240,255'], starA: 1, bright: ['255,220,170', '200,215,255'], core2: '255,255,255', vignette: ['0,0,0', 0.62], grain: 14 },
+    },
+    aurora: { // 极光: polar night with green and violet light
+      bg: '#03080c', text: '#eef7fa', soft: 'rgba(238,247,250,0.85)', muted: 'rgba(214,234,240,0.56)', dim: 'rgba(214,234,240,0.34)',
+      accent: '#7cf0cf', grad: ['#eafff8', '#7cf0cf', '#45b4dc'], line: '#dcf3ff', circle: '#bba8ff', spark: ['#d8fff3', '#e4e6ff'], spike: '#ffffff',
+      like: '#ff94c9', repost: '#b4f07c', reply: '#7fc8ff', quote: '#c7a6ff', glow: 0.32, sun: ['#8ef5d8', 0.36], title: SANS,
+      sky: { core: ['14,52,70', 0.6], warm: ['120,240,210', 0.06], angle: -0.22, tones: [['60,230,170', 0.13], ['70,190,255', 0.08], ['150,110,255', 0.1], ['40,210,150', 0.08], ['200,120,255', 0.05]],
+        dust: ['200,255,235', '220,230,255'], dustA: 0.8, lanes: 0.35, stars: ['210,255,240', '200,220,255', '236,244,255'], starA: 1, bright: ['150,255,220', '190,200,255'], core2: '255,255,255', vignette: ['0,0,0', 0.6], grain: 14 },
+    },
+    dawn: { // 晨曦: light, warm paper with pastel clouds
+      bg: '#fbf4ec', text: '#2a2130', soft: 'rgba(42,33,48,0.86)', muted: 'rgba(60,45,70,0.6)', dim: 'rgba(60,45,70,0.4)',
+      accent: '#c9784f', grad: ['#eaa47c', '#c9784f', '#a3573a'], line: '#4a3a5a', circle: '#6f9fd8', spark: ['#e7a27e', '#a99ad8'], spike: '#c9784f',
+      like: '#e0608c', repost: '#2f9e7e', reply: '#3f84d0', quote: '#8461d0', glow: 0.24, sun: ['#ffb98a', 0.4], title: SERIF,
+      sky: { core: ['255,253,249', 0.95], warm: ['255,200,160', 0.25], angle: -0.56, tones: [['255,170,160', 0.3], ['190,175,255', 0.26], ['255,210,150', 0.3], ['160,210,240', 0.22], ['255,190,215', 0.22]],
+        dust: ['200,140,120', '150,130,190'], dustA: 0.45, lanes: 0, stars: ['200,140,110', '150,130,200', '170,150,150'], starA: 0.4, bright: ['255,190,150', '200,180,255'], core2: '201,120,79', vignette: ['150,100,80', 0.14], grain: 8 },
+    },
   };
-  const DAYS = ['一', '二', '三', '四', '五', '六', '日'];
+  // All on-image text, in Chinese and English.
+  const STR = {
+    zh: {
+      over: '一周星图', mid: ' 和朋友们的 ', universe: 'X 宇宙', space: 4,
+      posts: (n) => `${n} 条动态，`, friends: (n) => `${n} 位朋友`, lit: '，一起点亮了这一周',
+      day: (d) => '周' + '一二三四五六日'[d],
+      likes: '获赞', replies: '回复', reposts: '转发', followers: '新关注', postCount: '发帖',
+      topPost: '本周最亮的一颗星', media: '（图片 / 视频）', noPosts: '这周还没有发帖，下周见 ✨',
+      fans: (n, shown) => (n > shown ? `等 ${n} 位朋友点亮了它` : '点亮了它'),
+      peak: '最闪耀时刻', meHour: '我最常出没', circleHour: '朋友们最活跃', quiet: '这一周还很安静',
+      kinds: ['喜欢', '转发', '回复 / 引用', '新关注'], closer: '离中心越近，互动越多', ring: ['外环：每小时的动态，', '朋友们', '向外，', '我', '向内'],
+      done: '一周 · 圆满', thanks: '谢谢你们，照亮了我的一周', thanks2: '下周，继续在这里相遇',
+    },
+    en: {
+      over: 'A WEEK IN STARS', mid: ' & Friends\u2019 ', universe: 'X Universe', space: 2,
+      posts: (n) => `${n} posts, `, friends: (n) => `${n} friends`, lit: ' lit up this week',
+      day: (d) => ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d],
+      likes: 'LIKES', replies: 'REPLIES', reposts: 'REPOSTS', followers: 'NEW FOLLOWERS', postCount: 'POSTS',
+      topPost: 'BRIGHTEST POST', media: '(image / video)', noPosts: 'No posts this week. See you next week ✨',
+      fans: (n, shown) => (n > shown ? `${n} friends lit it up` : 'lit it up'),
+      peak: 'BRIGHTEST HOUR', meHour: 'Me, most active', circleHour: 'Friends, most active', quiet: 'A quiet week',
+      kinds: ['like', 'repost', 'reply / quote', 'new follower'], closer: 'closer = more interaction', ring: ['outer ring: hourly activity, ', 'friends', ' out, ', 'me', ' in'],
+      done: 'Week complete', thanks: 'Thank you for lighting up my week', thanks2: 'See you here next week',
+    },
+  };
+  let TH = THEMES.starry, C = {}, S = STR.zh;
   // Chart geometry: my avatar, the week dial (168 hourly bars) and the people orbits.
   const G = { me: 30, dial: 404, outMax: 34, inMax: 13, dayR: 458 };
   const RINGS = {
@@ -37,8 +81,9 @@
     // 9:16 story for the video: stats in a row under the dial
     story: { W: 1080, H: 1920, cx: 540, cy: 876, over: 176, titleY: 254, subY: 298, clockY: 366, statsY: 1440, footY: 1546, thanksY: 1756, legendY: 1878 },
   };
-  // Video timeline (seconds)
+  // Video timeline (seconds). A video of another length plays the same timeline faster or slower.
   const T = { week0: 2.6, weekDur: 7, halo: 9.9, post: 10.9, thanks: 12, end: 15 };
+  let speed = 1;
 
   const el = (tag, attrs = {}, parent) => {
     const e = document.createElementNS(NS, tag);
@@ -116,12 +161,13 @@
       gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`);
       g.fillStyle = gr; g.beginPath(); g.arc(0, 0, ry, 0, 7); g.fill(); g.restore();
     };
-    g.fillStyle = '#04050b'; g.fillRect(0, 0, W, H);
-    blob(cx, cy, W * 0.78, W * 0.78, 0, '30,36,92', 0.55);
-    blob(cx, cy, 300, 300, 0, '255,196,120', 0.07);
+    const sky = TH.sky;
+    g.fillStyle = TH.bg; g.fillRect(0, 0, W, H);
+    blob(cx, cy, W * 0.78, W * 0.78, 0, ...sky.core);
+    blob(cx, cy, 300, 300, 0, ...sky.warm);
     // milky way: a band crossing behind the chart from lower left to upper right
-    const ang = -0.56, ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux, len = Math.hypot(W, H);
-    const tones = [['118,88,255', 0.11], ['70,160,235', 0.09], ['255,168,120', 0.05], ['196,110,255', 0.07], ['120,210,255', 0.05]];
+    const ang = sky.angle, ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux, len = Math.hypot(W, H);
+    const tones = sky.tones;
     for (let i = 0; i < 34; i++) {
       const s = (rand() - 0.5) * len, o = gauss() * 60;
       const [rgb, a] = tones[i % tones.length];
@@ -130,33 +176,33 @@
     for (let i = 0; i < 9000; i++) {
       const s = (rand() - 0.5) * len, o = gauss() * 80;
       const x = cx + ux * s + nx * o, y = cy + uy * s + ny * o;
-      g.fillStyle = `rgba(${rand() < 0.2 ? '255,232,205' : '222,228,255'},${0.06 + rand() * 0.3})`;
+      g.fillStyle = `rgba(${sky.dust[rand() < 0.2 ? 0 : 1]},${(0.06 + rand() * 0.3) * sky.dustA})`;
       g.fillRect(x, y, 0.9, 0.9);
     }
     // dark dust lanes along the band
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < 12 && sky.lanes; i++) {
       const s = (rand() - 0.5) * len * 0.9, o = 10 + gauss() * 20;
-      blob(cx + ux * s + nx * o, cy + uy * s + ny * o, 160 + rand() * 160, 18 + rand() * 22, ang + (rand() - 0.5) * 0.2, '4,5,11', 0.45);
+      blob(cx + ux * s + nx * o, cy + uy * s + ny * o, 160 + rand() * 160, 18 + rand() * 22, ang + (rand() - 0.5) * 0.2, '4,5,11', sky.lanes);
     }
     // field stars
     const n = Math.round((W * H) / 1300);
     for (let i = 0; i < n; i++) {
-      const r = Math.pow(rand(), 5) * 1.6 + 0.3, a = 0.18 + rand() * 0.6;
-      const tint = rand(); const rgb = tint < 0.12 ? '255,226,190' : tint < 0.24 ? '200,220,255' : '238,240,255';
+      const r = Math.pow(rand(), 5) * 1.6 + 0.3, a = (0.18 + rand() * 0.6) * sky.starA;
+      const tint = rand(); const rgb = sky.stars[tint < 0.12 ? 0 : tint < 0.24 ? 1 : 2];
       g.fillStyle = `rgba(${rgb},${a})`; g.beginPath(); g.arc(rand() * W, rand() * H, r, 0, 7); g.fill();
     }
     for (let i = 0; i < 22; i++) {
       const x = rand() * W, y = rand() * H, r = 5 + rand() * 12;
-      blob(x, y, r, r, 0, rand() < 0.3 ? '255,220,170' : '200,215,255', 0.35);
-      g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(x, y, 0.9 + rand() * 0.6, 0, 7); g.fill();
+      blob(x, y, r, r, 0, sky.bright[rand() < 0.3 ? 0 : 1], 0.35);
+      g.fillStyle = `rgba(${sky.core2},0.9)`; g.beginPath(); g.arc(x, y, 0.9 + rand() * 0.6, 0, 7); g.fill();
     }
     // vignette
     const vg = g.createRadialGradient(cx, H / 2, Math.min(W, H) * 0.42, cx, H / 2, len * 0.62);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.62)');
+    vg.addColorStop(0, `rgba(${sky.vignette[0]},0)`); vg.addColorStop(1, `rgba(${sky.vignette[0]},${sky.vignette[1]})`);
     g.fillStyle = vg; g.fillRect(0, 0, W, H);
     // film grain
     const img = g.getImageData(0, 0, cv.width, cv.height), d = img.data;
-    for (let i = 0; i < d.length; i += 4) { const v = (rand() - 0.5) * 14; d[i] += v; d[i + 1] += v; d[i + 2] += v; }
+    for (let i = 0; i < d.length; i += 4) { const v = (rand() - 0.5) * sky.grain; d[i] += v; d[i + 1] += v; d[i + 2] += v; }
     g.putImageData(img, 0, 0);
     return cv.toDataURL('image/jpeg', 0.92);
   }
@@ -165,6 +211,13 @@
     const L = LAYOUTS[layoutName];
     const video = layoutName === 'story';
     const { W, H, cx, cy } = L;
+    const O = model.options || {};
+    TH = THEMES[O.theme] || THEMES.starry;
+    C = { ...TH, mention: TH.reply, follow: TH.accent, gold: TH.accent, me: TH.accent };
+    S = STR[O.lang] || STR.zh;
+    speed = video && O.seconds ? T.end / O.seconds : 1;
+    const hide = new Set(O.hide || []);
+    const F = TH.title; // display font: titles, the top post, the brightest hour, the thanks
     anims = []; events = [];
     const svg = document.getElementById('stage');
     svg.innerHTML = '';
@@ -180,46 +233,55 @@
       el('stop', { offset: 0.35, 'stop-color': color, 'stop-opacity': op * 0.4 }, g);
       el('stop', { offset: 1, 'stop-color': color, 'stop-opacity': 0 }, g);
     };
-    radial('sun', '#ffd796', 0.42);
-    ['like', 'repost', 'reply', 'quote', 'mention', 'follow'].forEach((k) => radial('glow-' + k, C[k], 0.34));
+    radial('sun', ...TH.sun);
+    ['like', 'repost', 'reply', 'quote', 'mention', 'follow'].forEach((k) => radial('glow-' + k, C[k], TH.glow));
     const linear = (id, stops, attrs) => {
       const g = el('linearGradient', { id, ...attrs }, defs);
       stops.forEach(([o, c, a = 1]) => el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a }, g));
     };
-    linear('gold', [[0, '#fff3d6'], [0.55, '#f3d08a'], [1, '#d6a25e']], { x1: 0, y1: 0, x2: 1, y2: 1 });
-    linear('spikeH', [[0, '#fff', 0], [0.5, '#fff', 0.75], [1, '#fff', 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
-    linear('spikeV', [[0, '#fff', 0], [0.5, '#fff', 0.75], [1, '#fff', 0]], { x1: 0, y1: 0, x2: 0, y2: 1 });
-    linear('rule', [[0, '#f3d08a', 0], [0.5, '#f3d08a', 0.45], [1, '#f3d08a', 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
+    linear('gold', [[0, TH.grad[0]], [0.55, TH.grad[1]], [1, TH.grad[2]]], { x1: 0, y1: 0, x2: 1, y2: 1 });
+    linear('spikeH', [[0, TH.spike, 0], [0.5, TH.spike, 0.75], [1, TH.spike, 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
+    linear('spikeV', [[0, TH.spike, 0], [0.5, TH.spike, 0.75], [1, TH.spike, 0]], { x1: 0, y1: 0, x2: 0, y2: 1 });
+    linear('rule', [[0, TH.accent, 0], [0.5, TH.accent, 0.45], [1, TH.accent, 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
     const round = el('clipPath', { id: 'round', clipPathUnits: 'objectBoundingBox' }, defs);
     el('circle', { cx: 0.5, cy: 0.5, r: 0.5 }, round);
 
     // ---------- background ----------
-    el('image', { href: backdrop(L, hash(model.me.handle + layoutName)), x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none' }, svg);
+    el('image', { href: backdrop(L, hash(model.me.handle + layoutName + O.theme)), x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none' }, svg);
     const twinkle = el('g', {}, svg);
     const rand = rng(hash(model.me.handle + 'tw'));
     for (let i = 0; i < 60; i++) {
       const x = rand() * W, y = rand() * H, s = 2 + rand() * 4.5, base = 0.3 + rand() * 0.45;
-      const p = sparkle(twinkle, x, y, s, rand() < 0.3 ? '#ffe7c2' : '#e6ebff', base);
+      const p = sparkle(twinkle, x, y, s, TH.spark[rand() < 0.3 ? 0 : 1], base);
       if (video) { const sp = 0.7 + rand() * 2, ph = rand() * 6.28; anim((t, fin) => p.setAttribute('opacity', fin ? base : base * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * sp + ph))))); }
     }
 
     // ---------- header ----------
     const head = el('g', {}, svg);
     const name = model.me.name || model.me.handle;
-    const over = txt(head, M, L.over, '', { 'font-size': 14, fill: C.muted, 'letter-spacing': 5 });
-    span(over, '一周星图'); span(over, '   ·   ' + model.rangeLabel, { 'font-family': NUM, 'letter-spacing': 2 });
+    const over = txt(head, M, L.over, '', { 'font-size': 14, fill: C.muted, 'letter-spacing': S.space + 1 });
+    span(over, S.over); span(over, '   ·   ' + model.rangeLabel, { 'font-family': NUM, 'letter-spacing': 2 });
     txt(head, W - M, L.over, '@' + model.me.handle, { 'text-anchor': 'end', 'font-size': 14, fill: C.gold, 'font-family': NUM, 'letter-spacing': 1.5 });
     el('rect', { x: M, y: L.over + 18, width: W - 2 * M, height: 0.8, fill: 'url(#rule)' }, head);
     const TS = 60;
-    const rest = ' 和朋友们的 X 宇宙';
-    const title = txt(head, M - 3, L.titleY, '', { 'font-size': TS, 'font-family': SERIF, 'font-weight': 700, fill: C.text, 'letter-spacing': 2 });
-    span(title, fit(name, TS, W - 2 * M - measure(rest, TS, 700, SERIF) - 30, 700, SERIF));
-    span(title, ' 和朋友们的 ');
-    span(title, 'X 宇宙', { fill: 'url(#gold)' });
+    const title = txt(head, M - 3, L.titleY, '', { 'font-size': TS, 'font-family': F, 'font-weight': 700, fill: C.text, 'letter-spacing': S.space / 2 });
+    if (O.title) {
+      // a custom title still gets the accent on "X 宇宙" / "X Universe" if it contains it
+      const parts = fit(O.title, TS, W - 2 * M, 700, F).split(S.universe);
+      parts.forEach((part, i) => { if (i) span(title, S.universe, { fill: 'url(#gold)' }); span(title, part); });
+    } else {
+      const rest = S.mid + S.universe;
+      span(title, fit(name, TS, W - 2 * M - measure(rest, TS, 700, F) - 30, 700, F));
+      span(title, S.mid);
+      span(title, S.universe, { fill: 'url(#gold)' });
+    }
     const sub = txt(head, M, L.subY, '', { 'font-size': 19, fill: C.muted, 'letter-spacing': 1 });
-    span(sub, `${model.stats.posts} 条动态，`);
-    span(sub, `${model.stats.stars} 位朋友`, { fill: C.soft });
-    span(sub, '，一起点亮了这一周');
+    if (O.subtitle) span(sub, fit(O.subtitle, 19, W - 2 * M, 400));
+    else {
+      if (!hide.has('posts')) span(sub, S.posts(model.stats.posts));
+      span(sub, S.friends(model.stats.stars), { fill: C.soft });
+      span(sub, S.lit);
+    }
     if (video) anim((t) => { const p = outCubic(prog(t, 0.2, 1)); head.setAttribute('opacity', p); head.setAttribute('transform', `translate(0 ${14 * (1 - p)})`); });
 
     // ---------- chart ----------
@@ -235,13 +297,13 @@
       if (seg.from === 0) return;
       const a = slotAngle(seg.from);
       const [x1, y1] = polar(G.me + 22, a), [x2, y2] = polar(G.dial + G.outMax + 6, a);
-      const ln = el('line', { x1, y1, x2, y2, stroke: '#e8e4ff', 'stroke-width': 0.7, opacity: 0.09, 'stroke-dasharray': '2 5' }, gridL);
+      const ln = el('line', { x1, y1, x2, y2, stroke: C.line, 'stroke-width': 0.7, opacity: 0.09, 'stroke-dasharray': '2 5' }, gridL);
       if (video) anim((t) => ln.setAttribute('opacity', 0.09 * prog(t, 1.6, 0.8)));
     });
     // orbits
     Object.entries(RINGS).forEach(([ring, spec], i) => {
       const halo = ring === 'halo', circ = 2 * Math.PI * spec.R;
-      const o = el('circle', { cx, cy, r: spec.R, fill: 'none', stroke: halo ? C.gold : '#e8e4ff', 'stroke-width': halo ? 1 : 0.8, opacity: halo ? 0.28 : 0.12, 'stroke-dasharray': halo ? '1 6' : null }, gridL);
+      const o = el('circle', { cx, cy, r: spec.R, fill: 'none', stroke: halo ? C.gold : C.line, 'stroke-width': halo ? 1 : 0.8, opacity: halo ? 0.28 : 0.12, 'stroke-dasharray': halo ? '1 6' : null }, gridL);
       if (video && !halo) {
         o.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
         o.setAttribute('stroke-dasharray', circ);
@@ -255,7 +317,7 @@
     const dialIn = el('g', {}, dialL);
     for (let h = 0; h < 168; h++) {
       const [x, y] = polar(G.dial + 5, slotAngle(h + 0.5));
-      el('circle', { cx: x, cy: y, r: (model.startHour + h) % 6 === 0 ? 1 : 0.6, fill: '#e8e4ff', opacity: 0.3 }, dialIn);
+      el('circle', { cx: x, cy: y, r: (model.startHour + h) % 6 === 0 ? 1 : 0.6, fill: C.line, opacity: 0.3 }, dialIn);
     }
     act.daySegs.forEach((seg) => {
       if (seg.from > 0) {
@@ -269,7 +331,7 @@
       const rot = deg(a) + 90 - (Math.sin(a) > 0.01 ? 180 : 0);
       const hot = act.total && act.peakSlot >= seg.from && act.peakSlot < seg.to;
       const t = txt(dialIn, 0, 0, '', { transform: `translate(${x} ${y}) rotate(${rot})`, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 13, fill: hot ? C.gold : C.muted, 'letter-spacing': 2 });
-      span(t, '周' + DAYS[seg.dow]);
+      span(t, S.day(seg.dow));
       span(t, '  ' + seg.date, { 'font-family': NUM, 'font-size': 11.5, fill: hot ? C.gold : C.dim, 'letter-spacing': 1 });
     });
     if (video) anim((t) => { dialIn.setAttribute('opacity', prog(t, 1.6, 0.8)); });
@@ -323,7 +385,7 @@
     const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
     const nearest = (s, list) => list.reduce((best, o) => (!best || angDiff(s.a, o.a) < angDiff(s.a, best.a) ? o : best), null);
     const line = (a, b, op, dash) => {
-      const l = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#ece8ff', 'stroke-width': 0.8, opacity: op, 'stroke-dasharray': dash }, lineL);
+      const l = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: C.line, 'stroke-width': 0.8, opacity: op, 'stroke-dasharray': dash }, lineL);
       if (video) { const t0 = Math.max(a.t0, b.t0) + 0.2; anim((t) => l.setAttribute('opacity', op * prog(t, t0, 0.5))); }
     };
     if (video) {
@@ -390,7 +452,7 @@
         el('path', { d: `M0 0L${R * Math.cos(a0)} ${R * Math.sin(a0)}A${R} ${R} 0 0 1 ${R * Math.cos(a1)} ${R * Math.sin(a1)}Z`, fill: C.gold, opacity: 0.13 * Math.pow(1 - i / trail, 1.6) }, sweep);
       }
       el('line', { x1: G.me + 12, y1: 0, x2: G.dial + G.outMax + 8, y2: 0, stroke: C.gold, 'stroke-width': 6, opacity: 0.12, 'stroke-linecap': 'round' }, sweep);
-      el('line', { x1: G.me + 12, y1: 0, x2: G.dial + G.outMax + 8, y2: 0, stroke: '#fff3d6', 'stroke-width': 1.3, opacity: 0.95 }, sweep);
+      el('line', { x1: G.me + 12, y1: 0, x2: G.dial + G.outMax + 8, y2: 0, stroke: TH.grad[0], 'stroke-width': 1.3, opacity: 0.95 }, sweep);
       anim((t) => {
         const p = prog(t, T.week0, T.weekDur);
         sweep.setAttribute('transform', `translate(${cx} ${cy}) rotate(${-90 + 360 * p})`);
@@ -400,12 +462,12 @@
       anim((t) => { const p = prog(t, T.halo - 0.2, 1.1); ripple.setAttribute('r', G.me + (RINGS.halo.R + 40 - G.me) * outCubic(p)); ripple.setAttribute('opacity', p > 0 && p < 1 ? 0.6 * (1 - p) : 0); });
 
       const clock = el('g', {}, svg);
-      const lbl = txt(clock, W / 2, L.clockY, '', { 'text-anchor': 'middle', 'font-size': 26, fill: C.gold, 'font-family': SERIF, 'font-weight': 600, 'letter-spacing': 3 });
+      const lbl = txt(clock, W / 2, L.clockY, '', { 'text-anchor': 'middle', 'font-size': 26, fill: C.gold, 'font-family': F, 'font-weight': 600, 'letter-spacing': 3 });
       anim((t) => {
         const p = prog(t, T.week0, T.weekDur);
         const h = Math.min(167, Math.floor(p * 168));
         const seg = act.daySegs.find((d) => h >= d.from && h < d.to) || act.daySegs[0];
-        lbl.textContent = p >= 1 ? '一周 · 圆满' : `周${DAYS[seg.dow]}  ${String((model.startHour + h) % 24).padStart(2, '0')}:00`;
+        lbl.textContent = p >= 1 ? S.done : `${S.day(seg.dow)}  ${String((model.startHour + h) % 24).padStart(2, '0')}:00`;
         clock.setAttribute('opacity', prog(t, 1.8, 0.6) * (1 - prog(t, T.post, 0.6)));
       });
     }
@@ -415,7 +477,7 @@
     const stat = (parent, x, y, anchor, glyph, color, label, n, plus, size) => {
       const g = el('g', {}, parent);
       const right = anchor === 'end', mid = anchor === 'middle';
-      const lt = txt(g, mid ? x : right ? x - 26 : x + 26, y, '', { 'text-anchor': anchor, 'font-size': 14, fill: C.muted, 'letter-spacing': 4 });
+      const lt = txt(g, mid ? x : right ? x - 26 : x + 26, y, '', { 'text-anchor': anchor, 'font-size': 14, fill: C.muted, 'letter-spacing': S.space });
       span(lt, glyph + ' ', { fill: color }); span(lt, label);
       if (!mid) el('rect', { x: right ? x - 18 : x, y: y - 5, width: 18, height: 1, fill: C.gold, opacity: 0.6 }, g);
       const num = txt(g, x, y + size + 6, fmt(n, plus), { 'text-anchor': anchor, 'font-size': size, 'font-family': NUM, 'font-weight': 200, fill: plus ? 'url(#gold)' : C.text, 'letter-spacing': 1 });
@@ -424,15 +486,17 @@
     };
     const st = model.stats;
     const statG = el('g', {}, svg);
+    const all = { posts: ['✎', C.text, S.postCount, st.posts], likes: ['♥', C.like, S.likes, st.likes], reposts: ['↻', C.repost, S.reposts, st.reposts],
+      replies: ['❝', C.reply, S.replies, st.replies], followers: ['✦', C.follow, S.followers, st.newFollowers, true] };
     if (L.corners) {
+      // a hidden number leaves its corner empty
       const [top, bottom] = L.corners;
-      stat(statG, M, top, 'start', '♥', C.like, '获赞', st.likes, false, 50);
-      stat(statG, W - M, top, 'end', '❝', C.reply, '回复', st.replies, false, 50);
-      stat(statG, M, bottom, 'start', '↻', C.repost, '转发', st.reposts, false, 50);
-      stat(statG, W - M, bottom, 'end', '✦', C.follow, '新关注', st.newFollowers, true, 50);
+      [['likes', M, top, 'start'], ['replies', W - M, top, 'end'], ['reposts', M, bottom, 'start'], ['followers', W - M, bottom, 'end']].forEach(([k, x, y, anchor]) => {
+        if (!hide.has(k)) { const [g2, c, label, n, plus] = all[k]; stat(statG, x, y, anchor, g2, c, label, n, plus, 50); }
+      });
     } else {
-      [['✎', C.text, '发帖', st.posts], ['♥', C.like, '获赞', st.likes], ['↻', C.repost, '转发', st.reposts], ['❝', C.reply, '回复', st.replies], ['✦', C.follow, '新关注', st.newFollowers, true]]
-        .forEach(([g2, c, label, n, plus], i, arr) => stat(statG, M + (W - 2 * M) * (i + 0.5) / arr.length, L.statsY, 'middle', g2, c, label, n, plus, 48));
+      const row = ['posts', 'likes', 'reposts', 'replies', 'followers'].filter((k) => !hide.has(k));
+      row.forEach((k, i) => { const [g2, c, label, n, plus] = all[k]; stat(statG, M + (W - 2 * M) * (i + 0.5) / row.length, L.statsY, 'middle', g2, c, label, n, plus, 48); });
     }
     if (video) {
       anim((t) => statG.setAttribute('opacity', prog(t, T.week0 - 0.6, 0.6)));
@@ -442,56 +506,58 @@
     // ---------- footer: brightest post + brightest hour ----------
     const foot = el('g', {}, svg);
     const fy = L.footY, colX = 700;
-    const caption = (x, y, s) => { el('rect', { x, y: y - 5, width: 18, height: 1, fill: C.gold, opacity: 0.6 }, foot); txt(foot, x + 26, y, s, { 'font-size': 14, fill: C.muted, 'letter-spacing': 4 }); };
-    caption(M, fy, '本周最亮的一颗星');
+    const caption = (x, y, s) => { el('rect', { x, y: y - 5, width: 18, height: 1, fill: C.gold, opacity: 0.6 }, foot); txt(foot, x + 26, y, s, { 'font-size': 14, fill: C.muted, 'letter-spacing': S.space }); };
+    caption(M, fy, S.topPost);
     const top = model.topPost;
     if (top) {
       const PW = colX - M - 60;
-      wrap(top.text || '（图片 / 视频）', 20, PW, 2, SERIF).forEach((ln, i) => txt(foot, M, fy + 36 + i * 29, ln, { 'font-size': 20, fill: C.text, 'font-family': SERIF }));
+      wrap(top.text || S.media, 20, PW, 2, F).forEach((ln, i) => txt(foot, M, fy + 36 + i * 29, ln, { 'font-size': 20, fill: C.text, 'font-family': F }));
       const meta = txt(foot, M, fy + 94, '', { 'font-size': 13.5, fill: C.muted, 'font-family': NUM, 'letter-spacing': 0.5 });
-      span(meta, top.when, { 'font-family': SANS });
-      [['♥', top.likes, C.like], ['↻', top.reposts, C.repost], ['❝', top.replies, C.reply]].forEach(([g2, n, c]) => { span(meta, '     ' + g2 + ' ', { fill: c, 'font-family': SANS }); span(meta, fmt(n)); });
+      span(meta, `${S.day(top.dow)} ${top.time}`, { 'font-family': SANS });
+      [['♥', top.likes, C.like, 'likes'], ['↻', top.reposts, C.repost, 'reposts'], ['❝', top.replies, C.reply, 'replies']].filter((x) => !hide.has(x[3])).forEach(([g2, n, c]) => { span(meta, '     ' + g2 + ' ', { fill: c, 'font-family': SANS }); span(meta, fmt(n)); });
       const row = el('g', { transform: `translate(${M + 13} ${fy + 124})` }, foot);
       top.fans.forEach((f, i) => {
         const g = el('g', { transform: `translate(${i * 22} 0)` }, row);
-        el('circle', { r: 14, fill: '#070914' }, g);
+        el('circle', { r: 14, fill: C.bg }, g);
         avatar(g, 12.5, f.avatarData, f.name, f.handle, defs);
       });
-      if (top.fanCount) txt(foot, M + 13 + top.fans.length * 22 + 6, fy + 129, top.fanCount > top.fans.length ? `等 ${top.fanCount} 位朋友点亮了它` : '点亮了它', { 'font-size': 13.5, fill: C.muted });
+      if (top.fanCount) txt(foot, M + 13 + top.fans.length * 22 + 6, fy + 129, S.fans(top.fanCount, top.fans.length), { 'font-size': 13.5, fill: C.muted });
     } else {
-      txt(foot, M, fy + 40, '这周还没有发帖，下周见 ✨', { 'font-size': 19, fill: C.muted, 'font-family': SERIF });
+      txt(foot, M, fy + 40, S.noPosts, { 'font-size': 19, fill: C.muted, 'font-family': F });
     }
     el('rect', { x: colX - 34, y: fy - 14, width: 0.8, height: 150, fill: C.gold, opacity: 0.22 }, foot);
-    caption(colX, fy, '最闪耀时刻');
+    caption(colX, fy, S.peak);
     if (act.total) {
-      txt(foot, colX, fy + 56, act.peak, { 'font-size': 40, fill: 'url(#gold)', 'font-family': SERIF, 'font-weight': 700, 'letter-spacing': 2 });
-      const who = [['我最常出没', act.meHour, C.me], ['朋友们最活跃', act.circleHour, C.circle]].filter((w) => w[1] != null);
+      txt(foot, colX, fy + 56, `${S.day(act.peakDow)} ${act.peakTime}`, { 'font-size': 40, fill: 'url(#gold)', 'font-family': F, 'font-weight': 700, 'letter-spacing': 2 });
+      const who = [[S.meHour, act.meHour, C.me], [S.circleHour, act.circleHour, C.circle]].filter((w) => w[1] != null);
       who.forEach(([label, hr, c], i) => {
         const t = txt(foot, colX, fy + 100 + i * 28, '', { 'font-size': 14.5, fill: C.muted, 'letter-spacing': 1 });
         span(t, '● ', { fill: c, 'font-size': 10 }); span(t, label + '  '); span(t, `${hr}:00`, { fill: C.soft, 'font-family': NUM });
       });
     } else {
-      txt(foot, colX, fy + 44, '这一周还很安静', { 'font-size': 19, fill: C.muted, 'font-family': SERIF });
+      txt(foot, colX, fy + 44, S.quiet, { 'font-size': 19, fill: C.muted, 'font-family': F });
     }
     if (video) anim((t) => { const p = outCubic(prog(t, T.post, 0.9)); foot.setAttribute('opacity', p); foot.setAttribute('transform', `translate(0 ${16 * (1 - p)})`); });
 
     // ---------- legend ----------
     const legend = txt(svg, W / 2, L.legendY, '', { 'text-anchor': 'middle', 'font-size': 12.5, fill: C.dim, 'letter-spacing': 1 });
-    [['♥', '喜欢', C.like], ['↻', '转发', C.repost], ['❝', '回复 / 引用', C.reply], ['✦', '新关注', C.follow]].forEach(([g2, s, c], i) => { span(legend, (i ? '    ' : '') + g2 + ' ', { fill: c }); span(legend, s); });
-    span(legend, '    ·    离中心越近，互动越多    ·    外环：每小时的动态，');
-    span(legend, '朋友们', { fill: C.circle, 'fill-opacity': 0.8 }); span(legend, '向外，'); span(legend, '我', { fill: C.me }); span(legend, '向内');
+    [['♥', C.like], ['↻', C.repost], ['❝', C.reply], ['✦', C.follow]].forEach(([g2, c], i) => { span(legend, (i ? '    ' : '') + g2 + ' ', { fill: c }); span(legend, S.kinds[i]); });
+    span(legend, `    ·    ${S.closer}    ·    ${S.ring[0]}`);
+    span(legend, S.ring[1], { fill: C.circle }); span(legend, S.ring[2]); span(legend, S.ring[3], { fill: C.me }); span(legend, S.ring[4]);
     if (video) anim((t) => legend.setAttribute('opacity', prog(t, T.post + 0.4, 0.8)));
 
     // ---------- thanks (video) ----------
     if (video) {
-      const th = txt(svg, W / 2, L.thanksY, '谢谢你们，照亮了我的一周', { 'text-anchor': 'middle', 'font-size': 40, fill: 'url(#gold)', 'font-family': SERIF, 'font-weight': 700, 'letter-spacing': 6 });
-      const th2 = txt(svg, W / 2, L.thanksY + 50, '下周，继续在这里相遇', { 'text-anchor': 'middle', 'font-size': 19, fill: C.muted, 'letter-spacing': 6 });
+      const th = txt(svg, W / 2, L.thanksY, fit(O.thanks || S.thanks, 40, W - 2 * M, 700, F), { 'text-anchor': 'middle', 'font-size': 40, fill: 'url(#gold)', 'font-family': F, 'font-weight': 700, 'letter-spacing': S.space + 2 });
+      const th2 = txt(svg, W / 2, L.thanksY + 50, S.thanks2, { 'text-anchor': 'middle', 'font-size': 19, fill: C.muted, 'letter-spacing': S.space + 2 });
       anim((t) => { const p = outCubic(prog(t, T.thanks, 1.1)); th.setAttribute('opacity', p); th.setAttribute('transform', `translate(0 ${12 * (1 - p)})`); th2.setAttribute('opacity', prog(t, T.thanks + 0.6, 1)); });
-      const curtain = el('rect', { width: W, height: H, fill: '#04050b' }, svg);
+      const curtain = el('rect', { width: W, height: H, fill: C.bg }, svg);
       anim((t) => curtain.setAttribute('opacity', 1 - prog(t, 0, 0.7)));
     }
 
-    return { duration: T.end, width: W, height: H, T, events: events.sort((a, b) => a.t - b.t) };
+    // the soundtrack follows the video's own clock
+    const Tv = Object.fromEntries(Object.entries(T).map(([k, v]) => [k, v / speed]));
+    return { duration: T.end / speed, width: W, height: H, T: Tv, events: events.map((e) => ({ ...e, t: e.t / speed })).sort((a, b) => a.t - b.t) };
   }
 
   function sparkle(parent, x, y, s, color, op) {
@@ -499,12 +565,13 @@
     return el('path', { d: `M${x} ${y - s}C${x + k} ${y - k} ${x + k} ${y - k} ${x + s} ${y}C${x + k} ${y + k} ${x + k} ${y + k} ${x} ${y + s}C${x - k} ${y + k} ${x - k} ${y + k} ${x - s} ${y}C${x - k} ${y - k} ${x - k} ${y - k} ${x} ${y - s}Z`, fill: color, opacity: op }, parent);
   }
   function fmt(n, plus) {
-    const s = n >= 1e4 ? (n / 1e4).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '') + '万' : String(n);
+    const big = (d, u) => (n / d).toFixed(n >= d * 10 ? 0 : 1).replace(/\.0$/, '') + u;
+    const s = S === STR.en ? (n >= 1e6 ? big(1e6, 'M') : n >= 1e4 ? big(1e3, 'K') : String(n)) : n >= 1e4 ? big(1e4, '万') : String(n);
     return plus ? '+' + s : s;
   }
   function frame(t) {
     const fin = t == null || !isFinite(t);
-    const tt = fin ? 1e6 : t;
+    const tt = fin ? 1e6 : t * speed;
     anims.forEach((f) => f(tt, fin));
   }
 

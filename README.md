@@ -9,6 +9,7 @@
 - An outer dial traces the week hour by hour: friends' activity points outward, yours points inward, and the brightest hour is marked.
 - The corners hold the week's likes, replies, reposts and new followers. Below the map are the top post with the people who lit it up and the brightest hour (最闪耀时刻).
 - Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one. A soft generated soundtrack follows along, with a chime for each star as it lights up. Pass `--no-music` for a silent video.
+- Three looks: 星空 (starry, default), 极光 (aurora) and 晨曦 (dawn, light). Ask for a different style, an English version, a custom title, hidden numbers, or leaving out spam accounts, and the agent re-renders in seconds.
 
 All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. The page script only reads what is on screen, and progress is kept in a local file, never in x.com's storage. No API keys are needed and nothing is posted for you.
 
@@ -39,6 +40,7 @@ The agent visits your profile, your notifications and your most engaged posts fr
 cd skills/x-circle-agent-skill/scripts
 npm install
 node render.mjs ../assets/sample-data.json --out /tmp/x-universe --video
+node render.mjs ../assets/sample-data.json --out /tmp/x-universe --preview-themes   # all three themes side by side
 ```
 
 ## Notes

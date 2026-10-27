@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 // Render the "X 宇宙" constellation from data.json (written by collect.mjs export).
 //
-//   node render.mjs <data.json> [--out <dir>] [--video] [--no-music] [--name <显示名>]
+//   node render.mjs <data.json> [--out <dir>] [--video] [options]
 //
 // data.json comes from `collect.mjs export`. Writes <out>/x-universe.png (1080x1350 @2x) and, with --video, <out>/x-universe.mp4
-// (1080x1920, 15s, with a generated soundtrack synced to the animation unless --no-music).
+// (1080x1920, 15s, with a generated soundtrack synced to the animation). Options:
+//   --theme starry|aurora|dawn  (星空 / 极光 / 晨曦)     --lang zh|en
+//   --name / --title / --subtitle / --thanks <text>       --hide likes,replies,reposts,followers,posts
+//   --exclude handle1,handle2   --seconds 10..30   --no-music   --preview-themes (writes themes.png)
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,21 +18,33 @@ import { compose } from './music.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FPS = 30;
 const RING_SIZES = { inner: 8, middle: 16, outer: 28, halo: 24 };
+const THEMES = { starry: '星空', aurora: '极光', dawn: '晨曦' };
+const HIDEABLE = ['likes', 'replies', 'reposts', 'followers', 'posts'];
 
 function parseArgs(argv) {
-  const args = { input: null, out: null, video: false, music: true, name: null };
+  const args = { input: null, out: null, video: false, music: true, preview: false, name: null, theme: 'starry', lang: 'zh', hide: [], exclude: [] };
+  const list = (v) => String(v || '').split(/[,，\s]+/).map((x) => x.trim().replace(/^@/, '')).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--video') args.video = true;
     else if (a === '--no-music') args.music = false;
-    else if (a === '--out') args.out = argv[++i];
-    else if (a === '--name') args.name = argv[++i];
+    else if (a === '--preview-themes') args.preview = true;
+    else if (['--out', '--name', '--title', '--subtitle', '--thanks', '--theme', '--lang', '--seconds'].includes(a)) args[a.slice(2)] = argv[++i];
+    else if (a === '--hide') args.hide = list(argv[++i]).map((x) => x.toLowerCase());
+    else if (a === '--exclude') args.exclude = list(argv[++i]).map((x) => x.toLowerCase());
     else if (!a.startsWith('--')) args.input = a;
   }
   if (!args.input) {
-    console.error('usage: node render.mjs <data.json> [--out <dir>] [--video] [--no-music] [--name <显示名>]');
+    console.error('usage: node render.mjs <data.json> [--out <dir>] [--video] [--theme starry|aurora|dawn] [--lang zh|en] [--title|--subtitle|--thanks|--name <text>] [--hide likes,...] [--exclude h1,h2] [--seconds N] [--no-music] [--preview-themes]');
     process.exit(2);
   }
+  // themes also go by their Chinese names
+  args.theme = Object.keys(THEMES).find((k) => k === String(args.theme).toLowerCase() || THEMES[k] === args.theme);
+  if (!args.theme) throw new Error('--theme must be one of: ' + Object.entries(THEMES).map(([k, v]) => `${k} (${v})`).join(', '));
+  if (!['zh', 'en'].includes(args.lang)) throw new Error('--lang must be zh or en');
+  const bad = args.hide.filter((k) => !HIDEABLE.includes(k));
+  if (bad.length) throw new Error(`--hide takes: ${HIDEABLE.join(', ')} (got ${bad.join(', ')})`);
+  if (args.seconds != null) args.seconds = Math.min(30, Math.max(8, Number(args.seconds) || 15));
   args.out ||= path.dirname(path.resolve(args.input));
   return args;
 }
@@ -42,7 +57,6 @@ function zoned(iso, tz) {
   const dow = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(parts.weekday);
   return { ...parts, dow, hourNum: Number(parts.hour) };
 }
-const DAY_CN = ['一', '二', '三', '四', '五', '六', '日'];
 
 // ---------- data -> model ----------
 // data.json is the compact v2 shape written by `collect.mjs export`: only the people who are drawn,
@@ -55,10 +69,14 @@ export function buildModel(data, opts = {}) {
   const avatarUrl = (a) => (a && a.startsWith('~/') ? 'https://pbs.twimg.com/profile_images/' + a.slice(2) : a || '');
   const TYPES = ['like', 'repost', 'reply', 'quote', 'mention'];
 
-  const people = (data.people || []).map((p) => {
+  const excluded = new Set(opts.exclude || []);
+  const all = (data.people || []).map((p) => {
     const c = Object.fromEntries(TYPES.map((t, i) => [t, p.c?.[i] || 0]));
     return { handle: p.h, name: p.n || p.h, avatar: avatarUrl(p.a), c, score: p.s || 0, first: p.f || null, isNew: !!p.nf, topFan: !!p.tp };
   });
+  // --exclude drops accounts (spam, bots); export keeps a few spares so the rings stay full
+  const people = all.filter((p) => !excluded.has(p.handle.toLowerCase()));
+  const gone = all.filter((p) => excluded.has(p.handle.toLowerCase()));
   const kindOf = (p) => (p.c.reply || p.c.mention ? 'reply' : p.c.quote ? 'quote' : p.c.repost ? 'repost' : p.c.like ? 'like' : 'follow');
   const span = endMs - startMs;
   const interactors = people.filter((p) => p.score > 0)
@@ -79,8 +97,8 @@ export function buildModel(data, opts = {}) {
   const quietNew = people.filter((p) => p.isNew && p.score === 0);
   rings.halo = quietNew.slice(0, RING_SIZES.halo).map(star);
   const totals = data.totals || {};
-  const nInteractors = Math.max(totals.interactors || 0, interactors.length);
-  const nQuietNew = Math.max(totals.quietNew || 0, quietNew.length);
+  const nInteractors = Math.max((totals.interactors || 0) - gone.filter((p) => p.score > 0).length, interactors.length);
+  const nQuietNew = Math.max((totals.quietNew || 0) - gone.filter((p) => p.isNew && !p.score).length, quietNew.length);
 
   // activity: my own posts/replies vs. timestamped interactions from others
   const hoursMe = Array(24).fill(0), hoursCircle = Array(24).fill(0);
@@ -117,9 +135,9 @@ export function buildModel(data, opts = {}) {
     const z = zoned(iso(top.t), tz);
     topPost = {
       text: top.x || '', likes: top.l, reposts: top.r, replies: top.c,
-      when: `周${DAY_CN[z.dow]} ${z.hour}:${z.minute}`,
+      dow: z.dow, time: `${z.hour}:${z.minute}`,
       fans: fans.slice(0, 7).map((p) => ({ handle: p.handle, name: p.name, avatar: p.avatar })),
-      fanCount: Math.max(totals.topPostFans || 0, fans.length),
+      fanCount: Math.max((totals.topPostFans || 0) - gone.filter((p) => p.topFan).length, fans.length),
     };
   }
 
@@ -141,11 +159,12 @@ export function buildModel(data, opts = {}) {
     activity: {
       total: myTimes.length + circleTimes.length,
       weekMe, weekCircle, daySegs, peakSlot,
-      peak: `周${DAY_CN[pz.dow]} ${pz.hour}:00`,
+      peakDow: pz.dow, peakTime: `${pz.hour}:00`,
       meHour: myTimes.length ? argmax(hoursMe) : null,
       circleHour: circleTimes.length ? argmax(hoursCircle) : null,
     },
     topPost,
+    options: { theme: opts.theme || 'starry', lang: opts.lang || 'zh', hide: opts.hide || [], title: opts.title, subtitle: opts.subtitle, thanks: opts.thanks, seconds: opts.seconds },
   };
 }
 
@@ -202,11 +221,28 @@ async function openStage(browser, model, layout, scale) {
   return { page, info };
 }
 
-async function renderImage(browser, model, file) {
-  const { page } = await openStage(browser, model, 'poster', 2);
+async function renderImage(browser, model, file, scale = 2) {
+  const { page } = await openStage(browser, model, 'poster', scale);
   await page.evaluate(() => window.XC.frame(null));
   await page.waitForTimeout(150);
-  await page.screenshot({ path: file, type: 'png' });
+  const png = await page.screenshot({ path: file, type: 'png' });
+  await page.close();
+  return png;
+}
+
+// One image with the poster in every theme side by side, so the user can pick a look.
+async function renderPreview(browser, model, file) {
+  const shots = [];
+  for (const [theme, label] of Object.entries(THEMES)) {
+    const png = await renderImage(browser, { ...model, options: { ...model.options, theme } }, undefined, 1);
+    shots.push({ theme, label, src: 'data:image/png;base64,' + png.toString('base64') });
+  }
+  const page = await browser.newPage({ viewport: { width: 1740, height: 800 }, deviceScaleFactor: 1 });
+  await page.setContent(`<body style="margin:0;background:#16161a;font:500 22px 'PingFang SC',system-ui,sans-serif;color:#eee">
+    <div style="display:flex;gap:30px;padding:30px">${shots.map((s) => `<figure style="margin:0;text-align:center">
+      <img src="${s.src}" style="width:540px;height:675px;display:block;border-radius:6px">
+      <figcaption style="margin-top:14px">${s.label} <span style="opacity:.55">--theme ${s.theme}</span></figcaption></figure>`).join('')}</div></body>`);
+  await page.screenshot({ path: file, type: 'png', fullPage: true });
   await page.close();
 }
 
@@ -241,7 +277,7 @@ async function renderVideo(browser, model, file, music) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const data = JSON.parse(await readFile(args.input, 'utf8'));
-  const model = buildModel(data, { name: args.name });
+  const model = buildModel(data, args);
   await mkdir(args.out, { recursive: true });
   await inlineAvatars(model);
   await writeFile(path.join(args.out, 'model.json'), JSON.stringify(model, (k, v) => (k === 'avatarData' ? undefined : v), 2));
@@ -251,6 +287,11 @@ async function main() {
     const png = path.join(args.out, 'x-universe.png');
     await renderImage(browser, model, png);
     console.log('image: ' + png);
+    if (args.preview) {
+      const sheet = path.join(args.out, 'themes.png');
+      await renderPreview(browser, model, sheet);
+      console.log('themes: ' + sheet);
+    }
     if (args.video) {
       const mp4 = path.join(args.out, 'x-universe.mp4');
       await renderVideo(browser, model, mp4, args.music);
@@ -261,7 +302,7 @@ async function main() {
   }
   const st = model.stats;
   console.log(`summary: ${st.stars} people, ${st.posts} posts, ${st.likes} likes, ${st.reposts} reposts, ${st.replies} replies, +${st.newFollowers} followers` +
-    (model.activity.total ? `, peak ${model.activity.peak}` : ''));
+    (model.activity.total ? `, peak ${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][model.activity.peakDow]} ${model.activity.peakTime}` : ''));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

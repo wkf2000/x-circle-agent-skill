@@ -20,7 +20,7 @@ const DAYS = 7;
 const STALE_MS = 6 * 3600e3; // a collection older than this starts fresh
 const WEIGHT = { like: 1, repost: 2, mention: 2, reply: 3, quote: 3 };
 const TYPES = ['like', 'repost', 'reply', 'quote', 'mention'];
-const SHOWN = 52, HALO = 24; // must match the ring sizes in render.mjs
+const SHOWN = 52 + 12, HALO = 24 + 8; // render.mjs ring sizes, plus spares for render --exclude
 
 const FOLLOW_RE = /followed you|关注了你|關注了你|跟隨了你|フォローしました|vous a suivi|te siguió|folgt dir/i;
 const LIKE_RE = /liked|喜欢了|喜歡了|赞了|いいね/i;

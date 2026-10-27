@@ -66,8 +66,10 @@ export function buildModel(data, opts = {}) {
   });
   const rings = { inner: [], middle: [], outer: [], halo: [] };
   let i = 0;
+  // within a ring, order by first interaction so the video's sweep reveals people roughly in time order
+  const byFirst = (a, b) => (a.f ?? 0.5) - (b.f ?? 0.5);
   for (const ring of ['inner', 'middle', 'outer']) {
-    rings[ring] = interactors.slice(i, i + RING_SIZES[ring]).map(star);
+    rings[ring] = interactors.slice(i, i + RING_SIZES[ring]).map(star).sort(byFirst);
     i += RING_SIZES[ring];
   }
   const quietNew = people.filter((p) => p.isNew && p.score === 0);
@@ -77,14 +79,30 @@ export function buildModel(data, opts = {}) {
   const nQuietNew = Math.max(totals.quietNew || 0, quietNew.length);
 
   // activity: my own posts/replies vs. timestamped interactions from others
-  const hoursMe = Array(24).fill(0), hoursCircle = Array(24).fill(0), days = Array(7).fill(0);
+  const hoursMe = Array(24).fill(0), hoursCircle = Array(24).fill(0);
   const inRange = (s) => s * 1000 >= startMs && s * 1000 <= endMs;
   const myTimes = (data.myTimes || []).filter(inRange);
   const circleTimes = (data.circleTimes || []).filter(inRange);
-  for (const s of myTimes) { const z = zoned(iso(s), tz); hoursMe[z.hourNum]++; days[z.dow]++; }
-  for (const s of circleTimes) { const z = zoned(iso(s), tz); hoursCircle[z.hourNum]++; days[z.dow]++; }
-  const hoursAll = hoursMe.map((v, h) => v + hoursCircle[h]);
+  for (const s of myTimes) hoursMe[zoned(iso(s), tz).hourNum]++;
+  for (const s of circleTimes) hoursCircle[zoned(iso(s), tz).hourNum]++;
   const argmax = (arr) => arr.reduce((b, v, j) => (v > arr[b] ? j : b), 0);
+
+  // the week dial: 168 hourly slots from the (local) hour the range starts, plus the local days they fall in
+  const HOURS = 168;
+  const slot0 = Math.floor(startMs / 3600e3) * 3600e3;
+  const slot = (s) => Math.min(HOURS - 1, Math.max(0, Math.floor((s * 1000 - slot0) / 3600e3)));
+  const weekMe = Array(HOURS).fill(0), weekCircle = Array(HOURS).fill(0);
+  for (const s of myTimes) weekMe[slot(s)]++;
+  for (const s of circleTimes) weekCircle[slot(s)]++;
+  const daySegs = [];
+  for (let h = 0; h < HOURS; h++) {
+    const z = zoned(new Date(slot0 + h * 3600e3).toISOString(), tz);
+    const last = daySegs[daySegs.length - 1];
+    if (last && last.day === z.day) last.to = h + 1;
+    else daySegs.push({ day: z.day, from: h, to: h + 1, dow: z.dow, date: `${Number(z.month)}.${Number(z.day)}` });
+  }
+  const peakSlot = argmax(weekMe.map((v, h) => v + weekCircle[h]));
+  const pz = zoned(new Date(slot0 + peakSlot * 3600e3).toISOString(), tz);
 
   // top post (export sorts posts by engagement) and the people who lit it up
   const posts = (data.posts || []).filter((p) => inRange(p.t));
@@ -106,8 +124,7 @@ export function buildModel(data, opts = {}) {
   return {
     me: { handle: data.me?.handle || '', name: opts.name || data.me?.name || data.me?.handle || '', avatar: data.me?.avatar || '' },
     rangeLabel: `${s.year}.${s.month}.${s.day} – ${e.month}.${e.day}`,
-    weekDays: Array.from({ length: 7 }, (_, d) => (s.dow + d) % 7),
-    startHour: s.hourNum,
+    startHour: zoned(new Date(slot0).toISOString(), tz).hourNum,
     stats: {
       stars: nInteractors + nQuietNew,
       posts: posts.length,
@@ -117,7 +134,13 @@ export function buildModel(data, opts = {}) {
       newFollowers: totals.newFollowers ?? quietNew.length,
     },
     rings,
-    activity: { hoursMe, hoursCircle, days, total: myTimes.length + circleTimes.length, peakHour: argmax(hoursAll), peakDay: argmax(days) },
+    activity: {
+      total: myTimes.length + circleTimes.length,
+      weekMe, weekCircle, daySegs, peakSlot,
+      peak: `周${DAY_CN[pz.dow]} ${pz.hour}:00`,
+      meHour: myTimes.length ? argmax(hoursMe) : null,
+      circleHour: circleTimes.length ? argmax(hoursCircle) : null,
+    },
     topPost,
   };
 }
@@ -227,7 +250,7 @@ async function main() {
   }
   const st = model.stats;
   console.log(`summary: ${st.stars} people, ${st.posts} posts, ${st.likes} likes, ${st.reposts} reposts, ${st.replies} replies, +${st.newFollowers} followers` +
-    (model.activity.total ? `, peak 周${DAY_CN[model.activity.peakDay]} ${model.activity.peakHour}:00` : ''));
+    (model.activity.total ? `, peak ${model.activity.peak}` : ''));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

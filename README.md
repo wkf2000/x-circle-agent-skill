@@ -1,13 +1,14 @@
 # x-circle-agent-skill
 
-**[Name] 的 X 宇宙**: an agent skill that turns your last 7 days on X into a constellation poster, so you can thank the people who showed up for you.
+**[Name] 和朋友们的 X 宇宙**: an agent skill that turns your last 7 days on X into a constellation poster, so you can thank the people who showed up for you.
 
 ![sample](docs/sample.png)
 
-- You sit at the center as the sun. Everyone who liked, reposted, replied, quoted or mentioned you becomes a star, and the more they engaged, the closer their orbit.
+- Your friends are the stars. Everyone who liked, reposted, replied, quoted or mentioned you gets a place on the map, and the more they engaged, the closer their orbit. You sit quietly at the center, drawn about the same size as they are.
 - New followers shine on the gold outer halo with a ✦.
-- The poster also shows the week's totals (posts, likes, reposts, replies, new followers), your most active hour and day (活跃星时), and your top post with the people who lit it up.
-- Optional: a 15-second 9:16 video where the stars appear in the order they arrived during the week.
+- An outer dial traces the week hour by hour: friends' activity points outward, yours points inward, and the brightest hour is marked.
+- The corners hold the week's likes, replies, reposts and new followers. Below the map are the top post with the people who lit it up and the brightest hour (最闪耀时刻).
+- Optional: a 15-second 9:16 video in which a radar sweep circles the week and reveals the stars one by one.
 
 All data is collected **read-only** by your agent browsing x.com in your own logged-in browser. No API keys are needed and nothing is posted for you.
 

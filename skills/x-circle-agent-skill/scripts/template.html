@@ -4,38 +4,41 @@
 <meta charset="utf-8">
 <title>X 宇宙</title>
 <style>
-  html, body { margin: 0; padding: 0; background: #03040c; overflow: hidden; }
+  html, body { margin: 0; padding: 0; background: #04050b; overflow: hidden; }
   svg { display: block; }
-  text { font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif; }
 </style>
 </head>
 <body>
 <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
 <script>
 (() => {
-  const FONT = '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif';
+  const SANS = '"PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif';
+  const SERIF = '"Songti SC", "STSong", "Noto Serif CJK SC", "Noto Serif SC", "Source Han Serif SC", "SimSun", serif';
+  const NUM = '"Avenir Next", "Helvetica Neue", "Segoe UI", ' + SANS;
   const NS = 'http://www.w3.org/2000/svg';
-  const COLOR = {
-    like: '#ff6fa8', repost: '#3ee0a1', reply: '#6cb8ff', quote: '#b18cff', mention: '#6cb8ff', follow: '#ffd36b',
-    gold: '#ffd36b', text: '#f6f3ff', muted: 'rgba(222,216,255,0.62)', faint: 'rgba(205,205,255,0.16)',
-    me: '#ffd36b', circle: '#7fd8ff',
+  const C = {
+    like: '#ff8fb8', repost: '#6fe3bd', reply: '#93c8ff', quote: '#c6a8ff', mention: '#93c8ff', follow: '#f3d08a',
+    gold: '#f3d08a', text: '#f5f1e8', soft: 'rgba(245,241,232,0.84)', muted: 'rgba(228,224,240,0.56)', dim: 'rgba(228,224,240,0.34)',
+    me: '#f3d08a', circle: '#c4e0ff',
   };
   const DAYS = ['一', '二', '三', '四', '五', '六', '日'];
-  // Base orbit radii (scaled per layout) and star sizes per ring.
+  // Chart geometry: my avatar, the week dial (168 hourly bars) and the people orbits.
+  const G = { me: 30, dial: 404, outMax: 34, inMax: 13, dayR: 458 };
   const RINGS = {
-    inner:  { R: 150, jit: 14, size: 30, label: 15 },
-    middle: { R: 250, jit: 20, size: 22, label: 13 },
-    outer:  { R: 333, jit: 16, size: 16, label: 11 },
-    halo:   { R: 408, jit: 10, size: 13, label: 10.5 },
+    inner:  { R: 142, jit: 5, size: 27, label: 14 },
+    middle: { R: 228, jit: 8, size: 19, label: 12 },
+    outer:  { R: 298, jit: 7, size: 14.5, label: 10.5 },
+    halo:   { R: 360, jit: 5, size: 11.5, label: 10 },
   };
+  const M = 60;
   const LAYOUTS = {
-    // 4:5 poster for the timeline
-    poster: { W: 1080, H: 1350, cx: 540, cy: 632, k: 1, titleY: 84, subY: 126, legendY: 164, statsY: 1104, panelsY: 1176 },
-    // 9:16 story for the video
-    story: { W: 1080, H: 1920, cx: 540, cy: 840, k: 1.14, titleY: 200, subY: 252, legendY: 306, statsY: 1416, panelsY: 1500, clockY: 306, thanksY: 1790 },
+    // 4:5 poster for the timeline: stats sit in the four corners around the dial
+    poster: { W: 1080, H: 1350, cx: 540, cy: 672, over: 64, titleY: 140, subY: 182, corners: [258, 1052], footY: 1176, legendY: 1334 },
+    // 9:16 story for the video: stats in a row under the dial
+    story: { W: 1080, H: 1920, cx: 540, cy: 876, over: 176, titleY: 254, subY: 298, clockY: 366, statsY: 1440, footY: 1546, thanksY: 1756, legendY: 1878 },
   };
   // Video timeline (seconds)
-  const T = { week0: 2.6, weekDur: 7, halo: 9.8, post: 10.8, thanks: 11.8, end: 15 };
+  const T = { week0: 2.6, weekDur: 7, halo: 9.9, post: 10.9, thanks: 12, end: 15 };
 
   const el = (tag, attrs = {}, parent) => {
     const e = document.createElementNS(NS, tag);
@@ -48,20 +51,20 @@
   const hash = (s) => { let h = 2166136261; for (const ch of String(s)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
   const rng = (seed) => { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; };
   const ctx = document.createElement('canvas').getContext('2d');
-  const measure = (s, size, weight = 400) => { ctx.font = `${weight} ${size}px ${FONT}`; return ctx.measureText(s).width; };
-  const fit = (s, size, maxW, weight) => {
-    if (measure(s, size, weight) <= maxW) return s;
+  const measure = (s, size, weight = 400, family = SANS) => { ctx.font = `${weight} ${size}px ${family}`; return ctx.measureText(s).width; };
+  const fit = (s, size, maxW, weight, family) => {
+    if (measure(s, size, weight, family) <= maxW) return s;
     const ch = [...s];
-    while (ch.length > 1 && measure(ch.join('') + '…', size, weight) > maxW) ch.pop();
+    while (ch.length > 1 && measure(ch.join('') + '…', size, weight, family) > maxW) ch.pop();
     return ch.join('') + '…';
   };
-  const wrap = (s, size, maxW, maxLines) => {
+  const wrap = (s, size, maxW, maxLines, family) => {
     const lines = [];
     let cur = '';
     const chars = [...s.replace(/\s+/g, ' ').trim()];
     for (let i = 0; i < chars.length; i++) {
-      if (measure(cur + chars[i], size) > maxW) {
-        if (lines.length === maxLines - 1) { lines.push(fit(cur + chars.slice(i).join(''), size, maxW)); return lines; }
+      if (measure(cur + chars[i], size, 400, family) > maxW) {
+        if (lines.length === maxLines - 1) { lines.push(fit(cur + chars.slice(i).join(''), size, maxW, 400, family)); return lines; }
         lines.push(cur); cur = chars[i].trimStart();
       } else cur += chars[i];
     }
@@ -71,7 +74,9 @@
   const clamp01 = (x) => Math.max(0, Math.min(1, x));
   const prog = (t, a, d) => clamp01((t - a) / d);
   const outCubic = (x) => 1 - Math.pow(1 - x, 3);
-  const outBack = (x) => { const c1 = 1.9, c3 = c1 + 1; return x <= 0 ? 0 : 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const outBack = (x) => { const c1 = 1.7, c3 = c1 + 1; return x <= 0 ? 0 : 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  const slotAngle = (h) => -Math.PI / 2 + (2 * Math.PI * h) / 168;
+  const deg = (a) => (a * 180) / Math.PI;
 
   let anims = [];
   const anim = (fn) => anims.push(fn);
@@ -84,269 +89,407 @@
       const id = 'fb' + hash(seed + 'g');
       if (!defs.querySelector('#' + id)) {
         const g = el('linearGradient', { id, x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
-        el('stop', { offset: 0, 'stop-color': `hsl(${h},70%,62%)` }, g);
-        el('stop', { offset: 1, 'stop-color': `hsl(${(h + 50) % 360},70%,42%)` }, g);
+        el('stop', { offset: 0, 'stop-color': `hsl(${h},45%,58%)` }, g);
+        el('stop', { offset: 1, 'stop-color': `hsl(${(h + 50) % 360},45%,34%)` }, g);
       }
       el('circle', { r, fill: `url(#${id})` }, parent);
       txt(parent, 0, r * 0.36, [...(name || '?')][0].toUpperCase(), { 'text-anchor': 'middle', 'font-size': r, 'font-weight': 600, fill: '#fff' });
     }
   }
 
+  // The deep-sky backdrop (glow, milky way, dust, field stars, vignette, film grain) is painted once on a canvas.
+  function backdrop(L, seed) {
+    const { W, H, cx, cy } = L;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const cv = document.createElement('canvas');
+    cv.width = W * dpr; cv.height = H * dpr;
+    const g = cv.getContext('2d');
+    g.scale(dpr, dpr);
+    const rand = rng(seed);
+    const gauss = () => { let u = 0; for (let i = 0; i < 6; i++) u += rand(); return (u - 3) / 1.2; };
+    const blob = (x, y, rx, ry, rot, rgb, a) => {
+      g.save(); g.translate(x, y); g.rotate(rot); g.scale(rx / ry, 1);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, ry);
+      gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+      g.fillStyle = gr; g.beginPath(); g.arc(0, 0, ry, 0, 7); g.fill(); g.restore();
+    };
+    g.fillStyle = '#04050b'; g.fillRect(0, 0, W, H);
+    blob(cx, cy, W * 0.78, W * 0.78, 0, '30,36,92', 0.55);
+    blob(cx, cy, 300, 300, 0, '255,196,120', 0.07);
+    // milky way: a band crossing behind the chart from lower left to upper right
+    const ang = -0.56, ux = Math.cos(ang), uy = Math.sin(ang), nx = -uy, ny = ux, len = Math.hypot(W, H);
+    const tones = [['118,88,255', 0.11], ['70,160,235', 0.09], ['255,168,120', 0.05], ['196,110,255', 0.07], ['120,210,255', 0.05]];
+    for (let i = 0; i < 34; i++) {
+      const s = (rand() - 0.5) * len, o = gauss() * 60;
+      const [rgb, a] = tones[i % tones.length];
+      blob(cx + ux * s + nx * o, cy + uy * s + ny * o, 260 + rand() * 220, 90 + rand() * 80, ang, rgb, a);
+    }
+    for (let i = 0; i < 9000; i++) {
+      const s = (rand() - 0.5) * len, o = gauss() * 80;
+      const x = cx + ux * s + nx * o, y = cy + uy * s + ny * o;
+      g.fillStyle = `rgba(${rand() < 0.2 ? '255,232,205' : '222,228,255'},${0.06 + rand() * 0.3})`;
+      g.fillRect(x, y, 0.9, 0.9);
+    }
+    // dark dust lanes along the band
+    for (let i = 0; i < 12; i++) {
+      const s = (rand() - 0.5) * len * 0.9, o = 10 + gauss() * 20;
+      blob(cx + ux * s + nx * o, cy + uy * s + ny * o, 160 + rand() * 160, 18 + rand() * 22, ang + (rand() - 0.5) * 0.2, '4,5,11', 0.45);
+    }
+    // field stars
+    const n = Math.round((W * H) / 1300);
+    for (let i = 0; i < n; i++) {
+      const r = Math.pow(rand(), 5) * 1.6 + 0.3, a = 0.18 + rand() * 0.6;
+      const tint = rand(); const rgb = tint < 0.12 ? '255,226,190' : tint < 0.24 ? '200,220,255' : '238,240,255';
+      g.fillStyle = `rgba(${rgb},${a})`; g.beginPath(); g.arc(rand() * W, rand() * H, r, 0, 7); g.fill();
+    }
+    for (let i = 0; i < 22; i++) {
+      const x = rand() * W, y = rand() * H, r = 5 + rand() * 12;
+      blob(x, y, r, r, 0, rand() < 0.3 ? '255,220,170' : '200,215,255', 0.35);
+      g.fillStyle = 'rgba(255,255,255,0.9)'; g.beginPath(); g.arc(x, y, 0.9 + rand() * 0.6, 0, 7); g.fill();
+    }
+    // vignette
+    const vg = g.createRadialGradient(cx, H / 2, Math.min(W, H) * 0.42, cx, H / 2, len * 0.62);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.62)');
+    g.fillStyle = vg; g.fillRect(0, 0, W, H);
+    // film grain
+    const img = g.getImageData(0, 0, cv.width, cv.height), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const v = (rand() - 0.5) * 14; d[i] += v; d[i + 1] += v; d[i + 2] += v; }
+    g.putImageData(img, 0, 0);
+    return cv.toDataURL('image/jpeg', 0.92);
+  }
+
   function build(model, layoutName) {
     const L = LAYOUTS[layoutName];
     const video = layoutName === 'story';
+    const { W, H, cx, cy } = L;
     anims = [];
     const svg = document.getElementById('stage');
     svg.innerHTML = '';
-    svg.setAttribute('width', L.W); svg.setAttribute('height', L.H);
-    svg.setAttribute('viewBox', `0 0 ${L.W} ${L.H}`);
+    svg.setAttribute('width', W); svg.setAttribute('height', H);
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('font-family', SANS); // an attribute, so per-element font-family attributes still win
     const defs = el('defs', {}, svg);
 
     // ---------- defs ----------
-    const bg = el('radialGradient', { id: 'bg', cx: '50%', cy: (L.cy / L.H * 100) + '%', r: '75%' }, defs);
-    [['0', '#161c45'], ['0.45', '#0a0d26'], ['1', '#03040c']].forEach(([o, c]) => el('stop', { offset: o, 'stop-color': c }, bg));
-    const neb = (id, color, op) => {
+    const radial = (id, color, op) => {
       const g = el('radialGradient', { id }, defs);
       el('stop', { offset: 0, 'stop-color': color, 'stop-opacity': op }, g);
+      el('stop', { offset: 0.35, 'stop-color': color, 'stop-opacity': op * 0.4 }, g);
       el('stop', { offset: 1, 'stop-color': color, 'stop-opacity': 0 }, g);
     };
-    neb('nebA', '#7a43ff', 0.30); neb('nebB', '#00b7ff', 0.20); neb('nebC', '#ff4fa3', 0.16);
-    neb('sun', '#ffd36b', 0.55); neb('sunCore', '#fff6d8', 0.9);
-    Object.entries(COLOR).forEach(([k, c]) => neb('glow-' + k, c, 0.55));
+    radial('sun', '#ffd796', 0.42);
+    ['like', 'repost', 'reply', 'quote', 'mention', 'follow'].forEach((k) => radial('glow-' + k, C[k], 0.34));
+    const linear = (id, stops, attrs) => {
+      const g = el('linearGradient', { id, ...attrs }, defs);
+      stops.forEach(([o, c, a = 1]) => el('stop', { offset: o, 'stop-color': c, 'stop-opacity': a }, g));
+    };
+    linear('gold', [[0, '#fff3d6'], [0.55, '#f3d08a'], [1, '#d6a25e']], { x1: 0, y1: 0, x2: 1, y2: 1 });
+    linear('spikeH', [[0, '#fff', 0], [0.5, '#fff', 0.75], [1, '#fff', 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
+    linear('spikeV', [[0, '#fff', 0], [0.5, '#fff', 0.75], [1, '#fff', 0]], { x1: 0, y1: 0, x2: 0, y2: 1 });
+    linear('rule', [[0, '#f3d08a', 0], [0.5, '#f3d08a', 0.45], [1, '#f3d08a', 0]], { x1: 0, y1: 0, x2: 1, y2: 0 });
     const round = el('clipPath', { id: 'round', clipPathUnits: 'objectBoundingBox' }, defs);
     el('circle', { cx: 0.5, cy: 0.5, r: 0.5 }, round);
-    const titleGrad = el('linearGradient', { id: 'titleGrad', x1: 0, x2: 1 }, defs);
-    el('stop', { offset: 0, 'stop-color': '#ffe6a3' }, titleGrad);
-    el('stop', { offset: 1, 'stop-color': '#ffb86b' }, titleGrad);
 
     // ---------- background ----------
-    el('rect', { width: L.W, height: L.H, fill: 'url(#bg)' }, svg);
-    el('ellipse', { cx: L.W * 0.2, cy: L.cy - 260, rx: 520, ry: 380, fill: 'url(#nebA)' }, svg);
-    el('ellipse', { cx: L.W * 0.86, cy: L.cy + 280, rx: 520, ry: 420, fill: 'url(#nebB)' }, svg);
-    el('ellipse', { cx: L.W * 0.78, cy: L.cy - 420, rx: 380, ry: 300, fill: 'url(#nebC)' }, svg);
-    const starLayer = el('g', {}, svg);
-    const rand = rng(hash(model.me.handle + layoutName));
-    const nStars = Math.round(L.W * L.H / 2400);
-    for (let i = 0; i < nStars; i++) {
-      const r = Math.pow(rand(), 3) * 1.6 + 0.35;
-      const base = 0.25 + rand() * 0.65;
-      const c = el('circle', { cx: rand() * L.W, cy: rand() * L.H, r, fill: rand() < 0.15 ? '#ffe9c4' : '#dfe6ff', opacity: base }, starLayer);
-      if (video) {
-        const sp = 0.8 + rand() * 2.2, ph = rand() * 6.28;
-        anim((t, fin) => c.setAttribute('opacity', fin ? base : base * (0.6 + 0.4 * Math.sin(t * sp + ph))));
-      }
+    el('image', { href: backdrop(L, hash(model.me.handle + layoutName)), x: 0, y: 0, width: W, height: H, preserveAspectRatio: 'none' }, svg);
+    const twinkle = el('g', {}, svg);
+    const rand = rng(hash(model.me.handle + 'tw'));
+    for (let i = 0; i < 60; i++) {
+      const x = rand() * W, y = rand() * H, s = 2 + rand() * 4.5, base = 0.3 + rand() * 0.45;
+      const p = sparkle(twinkle, x, y, s, rand() < 0.3 ? '#ffe7c2' : '#e6ebff', base);
+      if (video) { const sp = 0.7 + rand() * 2, ph = rand() * 6.28; anim((t, fin) => p.setAttribute('opacity', fin ? base : base * (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * sp + ph))))); }
     }
-    for (let i = 0; i < 14; i++) sparkle(starLayer, rand() * L.W, rand() * L.H, 3 + rand() * 5, '#e9ecff', 0.35 + rand() * 0.4);
 
-    // ---------- title ----------
+    // ---------- header ----------
     const head = el('g', {}, svg);
     const name = model.me.name || model.me.handle;
-    const title = txt(head, 64, L.titleY, '', { 'font-size': 50, 'font-weight': 700, fill: COLOR.text, 'letter-spacing': 1 });
-    span(title, fit(name, 50, L.W - 64 - 330, 700));
-    span(title, ' 的 ', { 'font-weight': 300, fill: COLOR.muted });
-    span(title, 'X 宇宙', { fill: 'url(#titleGrad)' });
-    const sub = txt(head, 66, L.subY, '', { 'font-size': 21, fill: COLOR.muted, 'letter-spacing': 1 });
-    span(sub, '@' + model.me.handle, { fill: '#ffe6a3' });
-    span(sub, `  ·  ${model.rangeLabel}  ·  ${model.stats.stars} 颗星照亮了我的这一周`);
-    const legend = el('g', { transform: `translate(66 ${L.legendY})` }, svg);
-    let lx = 0;
-    [['♥', '喜欢', COLOR.like], ['↻', '转发', COLOR.repost], ['❝', '回复 / 引用', COLOR.reply], ['✦', '新关注', COLOR.follow]].forEach(([g, label, c]) => {
-      const t = txt(legend, lx, 0, '', { 'font-size': 15, fill: COLOR.muted });
-      span(t, g + ' ', { fill: c, 'font-size': 16 }); span(t, label);
-      lx += measure(g + ' ' + label, 15) + 26;
+    const over = txt(head, M, L.over, '', { 'font-size': 14, fill: C.muted, 'letter-spacing': 5 });
+    span(over, '一周星图'); span(over, '   ·   ' + model.rangeLabel, { 'font-family': NUM, 'letter-spacing': 2 });
+    txt(head, W - M, L.over, '@' + model.me.handle, { 'text-anchor': 'end', 'font-size': 14, fill: C.gold, 'font-family': NUM, 'letter-spacing': 1.5 });
+    el('rect', { x: M, y: L.over + 18, width: W - 2 * M, height: 0.8, fill: 'url(#rule)' }, head);
+    const TS = 60;
+    const rest = ' 和朋友们的 X 宇宙';
+    const title = txt(head, M - 3, L.titleY, '', { 'font-size': TS, 'font-family': SERIF, 'font-weight': 700, fill: C.text, 'letter-spacing': 2 });
+    span(title, fit(name, TS, W - 2 * M - measure(rest, TS, 700, SERIF) - 30, 700, SERIF));
+    span(title, ' 和朋友们的 ');
+    span(title, 'X 宇宙', { fill: 'url(#gold)' });
+    const sub = txt(head, M, L.subY, '', { 'font-size': 19, fill: C.muted, 'letter-spacing': 1 });
+    span(sub, `${model.stats.posts} 条动态，`);
+    span(sub, `${model.stats.stars} 位朋友`, { fill: C.soft });
+    span(sub, '，一起点亮了这一周');
+    if (video) anim((t) => { const p = outCubic(prog(t, 0.2, 1)); head.setAttribute('opacity', p); head.setAttribute('transform', `translate(0 ${14 * (1 - p)})`); });
+
+    // ---------- chart ----------
+    const chart = el('g', {}, svg);
+    if (video) anim((t) => { const s = 1 + 0.035 * prog(t, 0, T.end); chart.setAttribute('transform', `translate(${cx} ${cy}) scale(${s}) translate(${-cx} ${-cy})`); });
+    const gridL = el('g', {}, chart), dialL = el('g', {}, chart), lineL = el('g', {}, chart), starL = el('g', {}, chart);
+    const polar = (r, a) => [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+    const sweepTime = (a) => T.week0 + T.weekDur * ((((a + Math.PI / 2) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI);
+    const act = model.activity;
+
+    // day sectors: faint meridians from the center out to the dial
+    act.daySegs.forEach((seg) => {
+      if (seg.from === 0) return;
+      const a = slotAngle(seg.from);
+      const [x1, y1] = polar(G.me + 22, a), [x2, y2] = polar(G.dial + G.outMax + 6, a);
+      const ln = el('line', { x1, y1, x2, y2, stroke: '#e8e4ff', 'stroke-width': 0.7, opacity: 0.09, 'stroke-dasharray': '2 5' }, gridL);
+      if (video) anim((t) => ln.setAttribute('opacity', 0.09 * prog(t, 1.6, 0.8)));
     });
-    txt(legend, lx + 4, 0, '· 离中心越近，互动越多', { 'font-size': 15, fill: 'rgba(222,216,255,0.42)' });
-    if (video) {
-      anim((t) => { head.setAttribute('opacity', outCubic(prog(t, 0.2, 0.9))); head.setAttribute('transform', `translate(0 ${12 * (1 - outCubic(prog(t, 0.2, 0.9)))})`); });
-      anim((t) => legend.setAttribute('opacity', prog(t, T.halo + 0.6, 0.6)));
+    // orbits
+    Object.entries(RINGS).forEach(([ring, spec], i) => {
+      const halo = ring === 'halo', circ = 2 * Math.PI * spec.R;
+      const o = el('circle', { cx, cy, r: spec.R, fill: 'none', stroke: halo ? C.gold : '#e8e4ff', 'stroke-width': halo ? 1 : 0.8, opacity: halo ? 0.28 : 0.12, 'stroke-dasharray': halo ? '1 6' : null }, gridL);
+      if (video && !halo) {
+        o.setAttribute('transform', `rotate(-90 ${cx} ${cy})`);
+        o.setAttribute('stroke-dasharray', circ);
+        anim((t) => o.setAttribute('stroke-dashoffset', circ * (1 - outCubic(prog(t, 1.2 + i * 0.18, 1.2)))));
+      }
+      if (video && halo) anim((t) => o.setAttribute('opacity', 0.28 * prog(t, T.halo - 0.3, 0.6)));
+    });
+
+    // ---------- week dial ----------
+    el('circle', { cx, cy, r: G.dial, fill: 'none', stroke: C.gold, 'stroke-width': 0.8, opacity: 0.32 }, dialL);
+    const dialIn = el('g', {}, dialL);
+    for (let h = 0; h < 168; h++) {
+      const [x, y] = polar(G.dial + 5, slotAngle(h + 0.5));
+      el('circle', { cx: x, cy: y, r: (model.startHour + h) % 6 === 0 ? 1 : 0.6, fill: '#e8e4ff', opacity: 0.3 }, dialIn);
+    }
+    act.daySegs.forEach((seg) => {
+      if (seg.from > 0) {
+        const a = slotAngle(seg.from);
+        const [x1, y1] = polar(G.dial - 8, a), [x2, y2] = polar(G.dial + 10, a);
+        el('line', { x1, y1, x2, y2, stroke: C.gold, 'stroke-width': 1, opacity: 0.55 }, dialIn);
+      }
+      if (seg.to - seg.from < 10) return;
+      const a = slotAngle((seg.from + seg.to) / 2);
+      const [x, y] = polar(G.dayR, a);
+      const rot = deg(a) + 90 - (Math.sin(a) > 0.01 ? 180 : 0);
+      const hot = act.total && act.peakSlot >= seg.from && act.peakSlot < seg.to;
+      const t = txt(dialIn, 0, 0, '', { transform: `translate(${x} ${y}) rotate(${rot})`, 'text-anchor': 'middle', 'dominant-baseline': 'central', 'font-size': 13, fill: hot ? C.gold : C.muted, 'letter-spacing': 2 });
+      span(t, '周' + DAYS[seg.dow]);
+      span(t, '  ' + seg.date, { 'font-family': NUM, 'font-size': 11.5, fill: hot ? C.gold : C.dim, 'letter-spacing': 1 });
+    });
+    if (video) anim((t) => { dialIn.setAttribute('opacity', prog(t, 1.6, 0.8)); });
+    // hourly bars: friends outward, me inward
+    const maxC = Math.max(1, ...act.weekCircle), maxM = Math.max(1, ...act.weekMe);
+    for (let h = 0; h < 168; h++) {
+      const a = slotAngle(h + 0.5), peak = act.total && h === act.peakSlot;
+      const bars = [];
+      if (act.weekCircle[h]) {
+        const len = 3 + Math.pow(act.weekCircle[h] / maxC, 0.7) * (G.outMax - 3);
+        bars.push([G.dial + 3, len, peak ? C.gold : C.circle, peak ? 1 : 0.5 + 0.45 * act.weekCircle[h] / maxC]);
+      }
+      if (act.weekMe[h]) {
+        const len = 2 + Math.pow(act.weekMe[h] / maxM, 0.7) * (G.inMax - 2);
+        bars.push([G.dial - 3, -len, C.me, 0.85]);
+      }
+      bars.forEach(([r0, len, color, op]) => {
+        const [x1, y1] = polar(r0, a);
+        const b = el('line', { x1, y1, x2: x1, y2: y1, stroke: color, 'stroke-width': 3.4, 'stroke-linecap': 'round', opacity: op }, dialL);
+        const set = (p) => { const [x2, y2] = polar(r0 + len * p, a); b.setAttribute('x2', x2); b.setAttribute('y2', y2); };
+        set(1);
+        if (video) { const t0 = sweepTime(a); anim((t) => set(outCubic(prog(t, t0, 0.45)))); }
+      });
+      if (peak) {
+        const [x, y] = polar(G.dial + 3 + G.outMax + 9, a);
+        const pk = el('g', { transform: `translate(${x} ${y})` }, dialL);
+        el('circle', { r: 9, fill: 'url(#glow-follow)' }, pk);
+        sparkle(pk, 0, 0, 6, C.gold, 1);
+        if (video) { const t0 = sweepTime(a) + 0.3; anim((t) => pk.setAttribute('opacity', prog(t, t0, 0.4))); }
+      }
     }
 
-    // ---------- constellation ----------
-    const { cx, cy, k } = L;
-    const orbitLayer = el('g', {}, svg);
-    const lineLayer = el('g', {}, svg);
-    const starsLayer = el('g', {}, svg);
+    // ---------- people ----------
     const placed = { inner: [], middle: [], outer: [], halo: [] };
-    const offsets = { inner: -Math.PI / 2 + 0.35, middle: -Math.PI / 2 + 0.12, outer: -Math.PI / 2 + 0.05, halo: -Math.PI / 2 + 0.2 };
+    const offsets = { inner: -Math.PI / 2 + 0.38, middle: -Math.PI / 2 + 0.16, outer: -Math.PI / 2 + 0.07, halo: -Math.PI / 2 + 0.2 };
     Object.keys(RINGS).forEach((ring) => {
-      const spec = RINGS[ring];
-      const list = model.rings[ring];
-      const R = spec.R * k;
-      const orbit = el('circle', { cx, cy, r: R, fill: 'none', stroke: ring === 'halo' ? 'rgba(255,211,107,0.16)' : COLOR.faint, 'stroke-width': 1, 'stroke-dasharray': ring === 'halo' ? '1 7' : '2 6' }, orbitLayer);
-      if (video) anim((t) => orbit.setAttribute('opacity', prog(t, 1.3 + Object.keys(RINGS).indexOf(ring) * 0.2, 0.8)));
+      const spec = RINGS[ring], list = model.rings[ring];
       if (!list.length) return;
       const step = (Math.PI * 2) / list.length;
       list.forEach((s, j) => {
         const r1 = rng(hash(s.handle));
-        const a = offsets[ring] + (list.length > 1 ? j * step + (r1() - 0.5) * step * 0.35 : 0);
-        const rr = R + (r1() - 0.5) * spec.jit * 2 * k;
-        placed[ring].push({ ...s, a, x: cx + rr * Math.cos(a), y: cy + rr * Math.sin(a), size: spec.size * k * (ring === 'inner' || ring === 'middle' ? 0.85 + 0.3 * s.weight : 1), arc: step * rr });
+        const a = offsets[ring] + (list.length > 1 ? j * step + (r1() - 0.5) * step * 0.3 : 0);
+        const rr = spec.R + (r1() - 0.5) * spec.jit * 2;
+        const [x, y] = polar(rr, a);
+        const size = spec.size * (ring === 'inner' || ring === 'middle' ? 0.88 + 0.24 * s.weight : 1);
+        placed[ring].push({ ...s, a, x, y, size, arc: step * rr, t0: ring === 'halo' ? T.halo + 0.25 + j * 0.035 : sweepTime(a) });
       });
     });
-
-    // timing of each star in the video
-    const appear = (s, ring, idx) => ring === 'halo' ? T.halo + idx * 0.05 : T.week0 + (s.f ?? rng(hash(s.handle + 'f'))()) * T.weekDur;
-    Object.entries(placed).forEach(([ring, list]) => list.forEach((s, i) => { s.t0 = appear(s, ring, i); }));
 
     // constellation lines
     const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
     const nearest = (s, list) => list.reduce((best, o) => (!best || angDiff(s.a, o.a) < angDiff(s.a, best.a) ? o : best), null);
     const line = (a, b, op, dash) => {
-      const l = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#d9dcff', 'stroke-width': 1, opacity: op, 'stroke-dasharray': dash }, lineLayer);
-      const t0 = Math.max(a.t0 ?? 0, b.t0 ?? 0);
-      if (video) anim((t) => l.setAttribute('opacity', op * prog(t, t0 + 0.15, 0.5)));
+      const l = el('line', { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: '#ece8ff', 'stroke-width': 0.8, opacity: op, 'stroke-dasharray': dash }, lineL);
+      if (video) { const t0 = Math.max(a.t0, b.t0) + 0.2; anim((t) => l.setAttribute('opacity', op * prog(t, t0, 0.5))); }
     };
-    const sunNode = { x: cx, y: cy, t0: 1.2 };
-    placed.inner.forEach((s) => line(sunNode, s, 0.22));
+    const meNode = { x: cx, y: cy, t0: 1.2 };
+    placed.inner.forEach((s) => line(meNode, s, 0.2));
     const ring1 = [...placed.inner].sort((a, b) => a.a - b.a);
-    if (ring1.length > 2) ring1.forEach((s, i) => line(s, ring1[(i + 1) % ring1.length], 0.3));
-    placed.middle.forEach((s) => line(s, nearest(s, placed.inner), 0.18));
-    placed.outer.forEach((s) => line(s, nearest(s, placed.middle) || nearest(s, placed.inner), 0.12, '3 4'));
+    if (ring1.length > 2) ring1.forEach((s, i) => line(s, ring1[(i + 1) % ring1.length], 0.26));
+    placed.middle.forEach((s) => line(s, nearest(s, placed.inner), 0.16));
+    placed.outer.forEach((s) => line(s, nearest(s, placed.middle) || nearest(s, placed.inner), 0.11, '2 4'));
 
-    // the sun (me)
-    const sun = el('g', { transform: `translate(${cx} ${cy})` }, starsLayer);
-    const sunIn = el('g', {}, sun);
-    el('circle', { r: 175 * k, fill: 'url(#sun)' }, sunIn);
-    el('circle', { r: 86 * k, fill: 'url(#sunCore)', opacity: 0.35 }, sunIn);
-    const sr = 62 * k;
-    avatar(sunIn, sr, model.me.avatarData, name, model.me.handle, defs);
-    el('circle', { r: sr + 3, fill: 'none', stroke: COLOR.gold, 'stroke-width': 3 }, sunIn);
-    el('circle', { r: sr + 10, fill: 'none', stroke: 'rgba(255,211,107,0.35)', 'stroke-width': 1 }, sunIn);
-    if (video) anim((t) => { const p = prog(t, 0.9, 0.8); sunIn.setAttribute('transform', `scale(${outBack(p)})`); sunIn.setAttribute('opacity', clamp01(p * 2)); });
+    // me: a small, quiet center, about the size of my friends
+    const meG = el('g', { transform: `translate(${cx} ${cy})` }, starL);
+    const pulse = el('circle', { r: G.me, fill: 'none', stroke: C.gold, 'stroke-width': 1, opacity: 0 }, meG);
+    const meIn = el('g', {}, meG);
+    el('circle', { r: G.me * 3.4, fill: 'url(#sun)' }, meIn);
+    avatar(meIn, G.me, model.me.avatarData, name, model.me.handle, defs);
+    el('circle', { r: G.me + 2.2, fill: 'none', stroke: 'url(#gold)', 'stroke-width': 1.8 }, meIn);
+    el('circle', { r: G.me + 8, fill: 'none', stroke: C.gold, 'stroke-width': 0.8, opacity: 0.4, 'stroke-dasharray': '1 3' }, meIn);
+    if (video) {
+      anim((t) => { const p = prog(t, 0.9, 0.8); meIn.setAttribute('transform', `scale(${outBack(p)})`); meIn.setAttribute('opacity', clamp01(p * 2)); });
+      anim((t) => {
+        const q = t < 2 ? -1 : ((t - 2) % 2.4) / 2.4;
+        pulse.setAttribute('r', G.me + 4 + 46 * outCubic(Math.max(0, q)));
+        pulse.setAttribute('opacity', q < 0 ? 0 : 0.5 * (1 - q));
+      });
+    }
 
-    // stars (people)
     Object.entries(placed).forEach(([ring, list]) => list.forEach((s) => {
-      const spec = RINGS[ring];
-      const g = el('g', { transform: `translate(${s.x} ${s.y})` }, starsLayer);
+      const spec = RINGS[ring], color = C[s.kind];
+      const g = el('g', { transform: `translate(${s.x} ${s.y})` }, starL);
       const inner = el('g', {}, g);
-      const color = COLOR[s.kind];
-      el('circle', { r: s.size * 2.1, fill: `url(#glow-${s.kind})` }, inner);
+      el('circle', { r: s.size * 2.4, fill: `url(#glow-${s.kind})` }, inner);
+      if (ring === 'inner') {
+        const sl = s.size * 2.5;
+        el('rect', { x: -sl, y: -0.6, width: 2 * sl, height: 1.2, fill: 'url(#spikeH)', opacity: 0.55 }, inner);
+        el('rect', { x: -0.6, y: -sl, width: 1.2, height: 2 * sl, fill: 'url(#spikeV)', opacity: 0.55 }, inner);
+      }
       avatar(inner, s.size, s.avatarData, s.name, s.handle, defs);
-      el('circle', { r: s.size + 2, fill: 'none', stroke: color, 'stroke-width': ring === 'inner' ? 2.2 : 1.6 }, inner);
-      if (s.isNew) txt(inner, s.size * 0.78, -s.size * 0.62, '✦', { 'font-size': Math.max(12, s.size * 0.75), fill: COLOR.follow, 'text-anchor': 'middle' });
-      const fs = spec.label * k;
-      const maxW = Math.min(s.arc * 0.95, ring === 'inner' ? 150 : 118) ;
-      txt(inner, 0, s.size + fs + 5, fit(s.name || s.handle, fs, maxW), { 'text-anchor': 'middle', 'font-size': fs, fill: ring === 'halo' ? '#ffe6a3' : COLOR.text, opacity: ring === 'outer' || ring === 'halo' ? 0.8 : 0.95, 'font-weight': ring === 'inner' ? 600 : 400 });
-      if (ring === 'inner' || ring === 'middle') {
-        const parts = [['♥', s.c.like, COLOR.like], ['↻', s.c.repost, COLOR.repost], ['❝', s.c.reply + s.c.quote + s.c.mention, COLOR.reply]].filter((p) => p[1] > 0);
-        const cfs = (ring === 'inner' ? 12.5 : 11) * k;
-        const ct = txt(inner, 0, s.size + fs + cfs + 10, '', { 'text-anchor': 'middle', 'font-size': cfs, fill: COLOR.muted });
-        parts.forEach(([g2, n, c], i) => { span(ct, (i ? '  ' : '') + g2, { fill: c }); span(ct, String(n)); });
+      el('circle', { r: s.size + 1.8, fill: 'none', stroke: color, 'stroke-width': ring === 'inner' ? 1.6 : 1.2 }, inner);
+      if (s.isNew) sparkle(inner, s.size * 0.74, -s.size * 0.74, Math.max(4.5, s.size * 0.28), C.follow, 1);
+      const fs = spec.label;
+      const maxW = Math.min(s.arc * 0.92, ring === 'inner' ? 130 : 96);
+      txt(inner, 0, s.size + fs + 5, fit(s.name || s.handle, fs, maxW, ring === 'inner' ? 500 : 400), {
+        'text-anchor': 'middle', 'font-size': fs, fill: ring === 'halo' ? C.gold : C.text,
+        opacity: ring === 'inner' ? 0.95 : ring === 'middle' ? 0.85 : 0.68, 'font-weight': ring === 'inner' ? 500 : 400,
+      });
+      if (ring === 'inner') {
+        const parts = [['♥', s.c.like, C.like], ['↻', s.c.repost, C.repost], ['❝', s.c.reply + s.c.quote + s.c.mention, C.reply]].filter((p) => p[1] > 0);
+        const ct = txt(inner, 0, s.size + fs + 22, '', { 'text-anchor': 'middle', 'font-size': 11, fill: C.muted, 'font-family': NUM });
+        parts.forEach(([g2, n, c], i) => { span(ct, (i ? '   ' : '') + g2 + ' ', { fill: c, 'font-family': SANS }); span(ct, String(n)); });
       }
       if (video) anim((t) => { const p = prog(t, s.t0, 0.5); inner.setAttribute('transform', `scale(${outBack(p)})`); inner.setAttribute('opacity', clamp01(p * 2.5)); });
     }));
 
-
-    // ---------- week clock (video only) ----------
+    // ---------- video: radar sweep, halo ripple, week clock ----------
     if (video) {
-      const clock = el('g', {}, svg);
-      const lbl = txt(clock, L.W / 2, L.clockY, '', { 'text-anchor': 'middle', 'font-size': 24, fill: '#ffe6a3', 'font-weight': 500, 'letter-spacing': 2 });
-      const bw = 560, bx = (L.W - bw) / 2, by = L.clockY + 22;
-      el('rect', { x: bx, y: by, width: bw, height: 3, rx: 1.5, fill: 'rgba(255,255,255,0.12)' }, clock);
-      const bar = el('rect', { x: bx, y: by, width: 0, height: 3, rx: 1.5, fill: COLOR.gold }, clock);
-      for (let d = 0; d < 7; d++) txt(clock, bx + bw * (d + 0.5) / 7, by + 24, '周' + DAYS[model.weekDays[d]], { 'text-anchor': 'middle', 'font-size': 13, fill: COLOR.muted });
+      const sweep = el('g', {}, chart);
+      const trail = 40, R = G.dial;
+      for (let i = 0; i < trail; i++) {
+        const a0 = -((i + 1) * 1.3 * Math.PI) / 180, a1 = -(i * 1.3 * Math.PI) / 180;
+        el('path', { d: `M0 0L${R * Math.cos(a0)} ${R * Math.sin(a0)}A${R} ${R} 0 0 1 ${R * Math.cos(a1)} ${R * Math.sin(a1)}Z`, fill: C.gold, opacity: 0.13 * Math.pow(1 - i / trail, 1.6) }, sweep);
+      }
+      el('line', { x1: G.me + 12, y1: 0, x2: G.dial + G.outMax + 8, y2: 0, stroke: C.gold, 'stroke-width': 6, opacity: 0.12, 'stroke-linecap': 'round' }, sweep);
+      el('line', { x1: G.me + 12, y1: 0, x2: G.dial + G.outMax + 8, y2: 0, stroke: '#fff3d6', 'stroke-width': 1.3, opacity: 0.95 }, sweep);
       anim((t) => {
         const p = prog(t, T.week0, T.weekDur);
-        bar.setAttribute('width', bw * p);
-        const hrs = model.startHour + Math.max(0, Math.floor(p * 7 * 24 - 1e-6));
-        const day = (model.weekDays[0] + Math.floor(hrs / 24)) % 7, h = hrs % 24;
-        lbl.textContent = p >= 1 ? '一周完成 ✓' : `周${DAYS[day]}  ${String(h).padStart(2, '0')}:00`;
-        clock.setAttribute('opacity', Math.min(prog(t, 1.6, 0.6), 1 - prog(t, T.halo + 0.1, 0.5)));
+        sweep.setAttribute('transform', `translate(${cx} ${cy}) rotate(${-90 + 360 * p})`);
+        sweep.setAttribute('opacity', Math.min(prog(t, T.week0 - 0.3, 0.3), 1 - prog(t, T.week0 + T.weekDur, 0.5)));
+      });
+      const ripple = el('circle', { cx, cy, r: 0, fill: 'none', stroke: C.gold, 'stroke-width': 2 }, chart);
+      anim((t) => { const p = prog(t, T.halo - 0.2, 1.1); ripple.setAttribute('r', G.me + (RINGS.halo.R + 40 - G.me) * outCubic(p)); ripple.setAttribute('opacity', p > 0 && p < 1 ? 0.6 * (1 - p) : 0); });
+
+      const clock = el('g', {}, svg);
+      const lbl = txt(clock, W / 2, L.clockY, '', { 'text-anchor': 'middle', 'font-size': 26, fill: C.gold, 'font-family': SERIF, 'font-weight': 600, 'letter-spacing': 3 });
+      anim((t) => {
+        const p = prog(t, T.week0, T.weekDur);
+        const h = Math.min(167, Math.floor(p * 168));
+        const seg = act.daySegs.find((d) => h >= d.from && h < d.to) || act.daySegs[0];
+        lbl.textContent = p >= 1 ? '一周 · 圆满' : `周${DAYS[seg.dow]}  ${String((model.startHour + h) % 24).padStart(2, '0')}:00`;
+        clock.setAttribute('opacity', prog(t, 1.8, 0.6) * (1 - prog(t, T.post, 0.6)));
       });
     }
 
     // ---------- stats ----------
-    const stats = [
-      ['发帖', model.stats.posts], ['获赞', model.stats.likes], ['转发', model.stats.reposts],
-      ['回复', model.stats.replies], ['新关注', model.stats.newFollowers, true],
-    ];
+    const counters = [];
+    const stat = (parent, x, y, anchor, glyph, color, label, n, plus, size) => {
+      const g = el('g', {}, parent);
+      const right = anchor === 'end', mid = anchor === 'middle';
+      const lt = txt(g, mid ? x : right ? x - 26 : x + 26, y, '', { 'text-anchor': anchor, 'font-size': 14, fill: C.muted, 'letter-spacing': 4 });
+      span(lt, glyph + ' ', { fill: color }); span(lt, label);
+      if (!mid) el('rect', { x: right ? x - 18 : x, y: y - 5, width: 18, height: 1, fill: C.gold, opacity: 0.6 }, g);
+      const num = txt(g, x, y + size + 6, fmt(n, plus), { 'text-anchor': anchor, 'font-size': size, 'font-family': NUM, 'font-weight': 200, fill: plus ? 'url(#gold)' : C.text, 'letter-spacing': 1 });
+      counters.push([num, n, plus]);
+      return g;
+    };
+    const st = model.stats;
     const statG = el('g', {}, svg);
-    stats.forEach(([label, n, isNew], i) => {
-      const x = 64 + (L.W - 128) * (i + 0.5) / stats.length;
-      const num = txt(statG, x, L.statsY, fmt(n, isNew), { 'text-anchor': 'middle', 'font-size': 38, 'font-weight': 650, fill: isNew ? COLOR.gold : COLOR.text });
-      txt(statG, x, L.statsY + 28, label, { 'text-anchor': 'middle', 'font-size': 15, fill: COLOR.muted, 'letter-spacing': 2 });
-      if (video) anim((t) => { const p = isNew ? prog(t, T.halo, 1.2) : outCubic(prog(t, T.week0, T.weekDur)); num.textContent = fmt(Math.round(n * p), isNew); });
-    });
-    el('line', { x1: 64, x2: L.W - 64, y1: L.statsY + 50, y2: L.statsY + 50, stroke: 'rgba(255,255,255,0.10)' }, svg);
-    if (video) anim((t) => statG.setAttribute('opacity', prog(t, T.week0 - 0.6, 0.6)));
-
-    // ---------- activity panel ----------
-    const act = el('g', { transform: `translate(64 ${L.panelsY})` }, svg);
-    const AW = 440;
-    txt(act, 0, 0, '活跃星时', { 'font-size': 15, fill: COLOR.muted, 'letter-spacing': 3 });
-    const a = model.activity;
-    if (a.total > 0) {
-      const peak = txt(act, 0, 30, '', { 'font-size': 20, fill: COLOR.text, 'font-weight': 500 });
-      span(peak, '最闪耀时刻  ');
-      span(peak, `周${DAYS[a.peakDay]} · ${a.peakHour}:00`, { fill: COLOR.gold });
-      const lg = txt(act, AW, 30, '', { 'font-size': 12, fill: COLOR.muted, 'text-anchor': 'end' });
-      span(lg, '■ ', { fill: COLOR.me }); span(lg, '我  '); span(lg, '■ ', { fill: COLOR.circle }); span(lg, '朋友们');
-      const maxH = Math.max(...a.hoursMe.map((v, i) => v + a.hoursCircle[i]), 1);
-      const bw = AW / 24, base = 96, hmax = 48;
-      const bars = el('g', {}, act);
-      for (let h = 0; h < 24; h++) {
-        const hm = (a.hoursMe[h] / maxH) * hmax, hc = (a.hoursCircle[h] / maxH) * hmax;
-        el('rect', { x: h * bw + 1, y: base - 1.5, width: bw - 3, height: 1.5, fill: 'rgba(255,255,255,0.12)' }, bars);
-        const rm = el('rect', { x: h * bw + 1, y: base - hm, width: bw - 3, height: hm, rx: 1.5, fill: COLOR.me, opacity: 0.9 }, bars);
-        const rc = el('rect', { x: h * bw + 1, y: base - hm - hc, width: bw - 3, height: hc, rx: 1.5, fill: COLOR.circle, opacity: 0.85 }, bars);
-        if (video) anim((t) => {
-          const p = outCubic(prog(t, T.week0, T.weekDur));
-          rm.setAttribute('height', hm * p); rm.setAttribute('y', base - hm * p);
-          rc.setAttribute('height', hc * p); rc.setAttribute('y', base - (hm + hc) * p);
-        });
-      }
-      [0, 6, 12, 18, 24].forEach((h) => txt(act, Math.min(h * bw, AW - 6), base + 17, String(h), { 'font-size': 11, fill: 'rgba(222,216,255,0.45)', 'text-anchor': h === 0 ? 'start' : h === 24 ? 'end' : 'middle' }));
-      const dmax = Math.max(...a.days, 1);
-      for (let d = 0; d < 7; d++) {
-        const x = 18 + d * ((AW - 36) / 6);
-        const hot = d === a.peakDay;
-        el('circle', { cx: x, cy: base + 38, r: 2.5 + 6 * (a.days[d] / dmax), fill: hot ? COLOR.gold : '#cfd6ff', opacity: hot ? 1 : 0.35 + 0.5 * a.days[d] / dmax }, act);
-        txt(act, x, base + 64, '周' + DAYS[d], { 'text-anchor': 'middle', 'font-size': 12.5, fill: hot ? COLOR.gold : COLOR.muted });
-      }
+    if (L.corners) {
+      const [top, bottom] = L.corners;
+      stat(statG, M, top, 'start', '♥', C.like, '获赞', st.likes, false, 50);
+      stat(statG, W - M, top, 'end', '❝', C.reply, '回复', st.replies, false, 50);
+      stat(statG, M, bottom, 'start', '↻', C.repost, '转发', st.reposts, false, 50);
+      stat(statG, W - M, bottom, 'end', '✦', C.follow, '新关注', st.newFollowers, true, 50);
     } else {
-      txt(act, 0, 34, '这一周还很安静', { 'font-size': 18, fill: COLOR.muted });
+      [['✎', C.text, '发帖', st.posts], ['♥', C.like, '获赞', st.likes], ['↻', C.repost, '转发', st.reposts], ['❝', C.reply, '回复', st.replies], ['✦', C.follow, '新关注', st.newFollowers, true]]
+        .forEach(([g2, c, label, n, plus], i, arr) => stat(statG, M + (W - 2 * M) * (i + 0.5) / arr.length, L.statsY, 'middle', g2, c, label, n, plus, 48));
     }
-    if (video) anim((t) => act.setAttribute('opacity', prog(t, T.week0 - 0.4, 0.6)));
+    if (video) {
+      anim((t) => statG.setAttribute('opacity', prog(t, T.week0 - 0.6, 0.6)));
+      counters.forEach(([num, n, plus]) => anim((t) => { const p = plus ? outCubic(prog(t, T.halo, 1.2)) : outCubic(prog(t, T.week0, T.weekDur)); num.textContent = fmt(Math.round(n * p), plus); }));
+    }
 
-    // ---------- top post panel ----------
-    const tp = el('g', { transform: `translate(${L.W - 64 - 440} ${L.panelsY})` }, svg);
-    const PW = 440;
-    txt(tp, 0, 0, '本周最亮的一颗星', { 'font-size': 15, fill: COLOR.muted, 'letter-spacing': 3 });
+    // ---------- footer: brightest post + brightest hour ----------
+    const foot = el('g', {}, svg);
+    const fy = L.footY, colX = 700;
+    const caption = (x, y, s) => { el('rect', { x, y: y - 5, width: 18, height: 1, fill: C.gold, opacity: 0.6 }, foot); txt(foot, x + 26, y, s, { 'font-size': 14, fill: C.muted, 'letter-spacing': 4 }); };
+    caption(M, fy, '本周最亮的一颗星');
     const top = model.topPost;
     if (top) {
-      el('rect', { x: -14, y: 12, width: 3, height: 50, rx: 1.5, fill: COLOR.gold, opacity: 0.8 }, tp);
-      wrap(top.text || '（图片 / 视频）', 18, PW, 2).forEach((ln, i) => txt(tp, 0, 32 + i * 26, ln, { 'font-size': 18, fill: COLOR.text }));
-      const meta = txt(tp, 0, 92, '', { 'font-size': 14, fill: COLOR.muted });
-      span(meta, top.when + '    ');
-      span(meta, '♥ ', { fill: COLOR.like }); span(meta, fmt(top.likes) + '   ');
-      span(meta, '↻ ', { fill: COLOR.repost }); span(meta, fmt(top.reposts) + '   ');
-      span(meta, '❝ ', { fill: COLOR.reply }); span(meta, fmt(top.replies));
-      const row = el('g', { transform: 'translate(15 124)' }, tp);
+      const PW = colX - M - 60;
+      wrap(top.text || '（图片 / 视频）', 20, PW, 2, SERIF).forEach((ln, i) => txt(foot, M, fy + 36 + i * 29, ln, { 'font-size': 20, fill: C.text, 'font-family': SERIF }));
+      const meta = txt(foot, M, fy + 94, '', { 'font-size': 13.5, fill: C.muted, 'font-family': NUM, 'letter-spacing': 0.5 });
+      span(meta, top.when, { 'font-family': SANS });
+      [['♥', top.likes, C.like], ['↻', top.reposts, C.repost], ['❝', top.replies, C.reply]].forEach(([g2, n, c]) => { span(meta, '     ' + g2 + ' ', { fill: c, 'font-family': SANS }); span(meta, fmt(n)); });
+      const row = el('g', { transform: `translate(${M + 13} ${fy + 124})` }, foot);
       top.fans.forEach((f, i) => {
-        const g = el('g', { transform: `translate(${i * 24} 0)` }, row);
-        el('circle', { r: 15.5, fill: '#0a0d26' }, g);
-        avatar(g, 14, f.avatarData, f.name, f.handle, defs);
+        const g = el('g', { transform: `translate(${i * 22} 0)` }, row);
+        el('circle', { r: 14, fill: '#070914' }, g);
+        avatar(g, 12.5, f.avatarData, f.name, f.handle, defs);
       });
-      if (top.fanCount) txt(tp, 15 + top.fans.length * 24 + 4, 129, top.fanCount > top.fans.length ? `等 ${top.fanCount} 位朋友点亮了它` : '点亮了它', { 'font-size': 13.5, fill: COLOR.muted });
+      if (top.fanCount) txt(foot, M + 13 + top.fans.length * 22 + 6, fy + 129, top.fanCount > top.fans.length ? `等 ${top.fanCount} 位朋友点亮了它` : '点亮了它', { 'font-size': 13.5, fill: C.muted });
     } else {
-      txt(tp, 0, 34, '这周还没有发帖，下周见 ✨', { 'font-size': 18, fill: COLOR.muted });
+      txt(foot, M, fy + 40, '这周还没有发帖，下周见 ✨', { 'font-size': 19, fill: C.muted, 'font-family': SERIF });
     }
-    if (video) anim((t) => tp.setAttribute('opacity', prog(t, T.post, 0.8)));
+    el('rect', { x: colX - 34, y: fy - 14, width: 0.8, height: 150, fill: C.gold, opacity: 0.22 }, foot);
+    caption(colX, fy, '最闪耀时刻');
+    if (act.total) {
+      txt(foot, colX, fy + 56, act.peak, { 'font-size': 40, fill: 'url(#gold)', 'font-family': SERIF, 'font-weight': 700, 'letter-spacing': 2 });
+      const who = [['我最常出没', act.meHour, C.me], ['朋友们最活跃', act.circleHour, C.circle]].filter((w) => w[1] != null);
+      who.forEach(([label, hr, c], i) => {
+        const t = txt(foot, colX, fy + 100 + i * 28, '', { 'font-size': 14.5, fill: C.muted, 'letter-spacing': 1 });
+        span(t, '● ', { fill: c, 'font-size': 10 }); span(t, label + '  '); span(t, `${hr}:00`, { fill: C.soft, 'font-family': NUM });
+      });
+    } else {
+      txt(foot, colX, fy + 44, '这一周还很安静', { 'font-size': 19, fill: C.muted, 'font-family': SERIF });
+    }
+    if (video) anim((t) => { const p = outCubic(prog(t, T.post, 0.9)); foot.setAttribute('opacity', p); foot.setAttribute('transform', `translate(0 ${16 * (1 - p)})`); });
+
+    // ---------- legend ----------
+    const legend = txt(svg, W / 2, L.legendY, '', { 'text-anchor': 'middle', 'font-size': 12.5, fill: C.dim, 'letter-spacing': 1 });
+    [['♥', '喜欢', C.like], ['↻', '转发', C.repost], ['❝', '回复 / 引用', C.reply], ['✦', '新关注', C.follow]].forEach(([g2, s, c], i) => { span(legend, (i ? '    ' : '') + g2 + ' ', { fill: c }); span(legend, s); });
+    span(legend, '    ·    离中心越近，互动越多    ·    外环：每小时的动态，');
+    span(legend, '朋友们', { fill: C.circle, 'fill-opacity': 0.8 }); span(legend, '向外，'); span(legend, '我', { fill: C.me }); span(legend, '向内');
+    if (video) anim((t) => legend.setAttribute('opacity', prog(t, T.post + 0.4, 0.8)));
 
     // ---------- thanks (video) ----------
     if (video) {
-      const th = txt(svg, L.W / 2, L.thanksY, '谢谢你们，照亮了我的一周', { 'text-anchor': 'middle', 'font-size': 34, fill: 'url(#titleGrad)', 'font-weight': 600, 'letter-spacing': 4 });
-      const th2 = txt(svg, L.W / 2, L.thanksY + 44, '下周，继续在这里相遇 ✨', { 'text-anchor': 'middle', 'font-size': 19, fill: COLOR.muted, 'letter-spacing': 2 });
-      anim((t) => { const p = outCubic(prog(t, T.thanks, 1)); th.setAttribute('opacity', p); th2.setAttribute('opacity', prog(t, T.thanks + 0.5, 1)); });
-      const curtain = el('rect', { width: L.W, height: L.H, fill: '#03040c' }, svg);
-      anim((t) => curtain.setAttribute('opacity', 1 - prog(t, 0, 0.6)));
+      const th = txt(svg, W / 2, L.thanksY, '谢谢你们，照亮了我的一周', { 'text-anchor': 'middle', 'font-size': 40, fill: 'url(#gold)', 'font-family': SERIF, 'font-weight': 700, 'letter-spacing': 6 });
+      const th2 = txt(svg, W / 2, L.thanksY + 50, '下周，继续在这里相遇', { 'text-anchor': 'middle', 'font-size': 19, fill: C.muted, 'letter-spacing': 6 });
+      anim((t) => { const p = outCubic(prog(t, T.thanks, 1.1)); th.setAttribute('opacity', p); th.setAttribute('transform', `translate(0 ${12 * (1 - p)})`); th2.setAttribute('opacity', prog(t, T.thanks + 0.6, 1)); });
+      const curtain = el('rect', { width: W, height: H, fill: '#04050b' }, svg);
+      anim((t) => curtain.setAttribute('opacity', 1 - prog(t, 0, 0.7)));
     }
 
-    return { duration: T.end, width: L.W, height: L.H };
+    return { duration: T.end, width: W, height: H };
   }
 
   function sparkle(parent, x, y, s, color, op) {
-    el('path', { d: `M${x} ${y - s} Q${x} ${y} ${x + s} ${y} Q${x} ${y} ${x} ${y + s} Q${x} ${y} ${x - s} ${y} Q${x} ${y} ${x} ${y - s}Z`, fill: color, opacity: op }, parent);
+    const k = s * 0.16;
+    return el('path', { d: `M${x} ${y - s}C${x + k} ${y - k} ${x + k} ${y - k} ${x + s} ${y}C${x + k} ${y + k} ${x + k} ${y + k} ${x} ${y + s}C${x - k} ${y + k} ${x - k} ${y + k} ${x - s} ${y}C${x - k} ${y - k} ${x - k} ${y - k} ${x} ${y - s}Z`, fill: color, opacity: op }, parent);
   }
   function fmt(n, plus) {
     const s = n >= 1e4 ? (n / 1e4).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '') + '万' : String(n);

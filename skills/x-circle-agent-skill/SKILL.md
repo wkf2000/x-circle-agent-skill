@@ -1,6 +1,6 @@
 ---
 name: x-circle-agent-skill
-description: Turns the past 7 days of an X (Twitter) account into a shareable constellation poster titled "[Name] 的 X 宇宙" — the user at the center, everyone who liked, reposted, replied or newly followed them placed as stars on orbits (closer = more engaged), plus weekly stats, the most active hour/day, and the week's top post. Optionally renders a 15-second 9:16 video. Collects data read-only by browsing x.com in the built-in browser (fallback: Claude in Chrome). Use when the user asks for their X/Twitter weekly interaction map, "X 宇宙", "x circle", a thank-you image for followers, who interacted with them this week, or a weekly X recap image/video.
+description: Turns the past 7 days of an X (Twitter) account into a shareable constellation poster titled "[Name] 和朋友们的 X 宇宙" — everyone who liked, reposted, replied or newly followed the user placed as stars on orbits around them (closer = more engaged), an hour-by-hour week dial, weekly stats, the brightest hour, and the week's top post. Optionally renders a 15-second 9:16 video. Collects data read-only by browsing x.com in the built-in browser (fallback: Claude in Chrome). Use when the user asks for their X/Twitter weekly interaction map, "X 宇宙", "x circle", a thank-you image for followers, who interacted with them this week, or a weekly X recap image/video.
 ---
 
 # X 宇宙 (x-circle)
@@ -79,9 +79,11 @@ The script prints a one-line summary and writes `model.json` (what was drawn) ne
 ## How the map is built
 
 - Score per person: like 1, repost 2, mention 2, reply 3, quote 3.
-- Rings by rank: inner 8, middle 16, outer 28 people. New followers who did not interact sit on the dotted gold halo (up to 24). The subtitle counts everyone ("N 颗星照亮了我的这一周").
+- Rings by rank: inner 8, middle 16, outer 28 people, each ring ordered by first interaction. New followers who did not interact sit on the dotted gold halo (up to 24). The user sits at the center, about the size of an inner-ring friend, because the map is meant to celebrate the friends. The subtitle counts everyone ("N 位朋友，一起点亮了这一周").
+- Week dial: 168 hourly bars around the map, starting at the top and running clockwise from the start of the range. Friends' timestamped interactions point outward and the user's own posts and replies point inward. The busiest hour gets a gold ✦ and is shown as 最闪耀时刻.
 - Star color = deepest interaction: blue reply/mention, purple quote, green repost, pink like, gold new follower. ✦ marks new followers.
-- Stats (发帖 / 获赞 / 转发 / 回复) are X's own counters summed over the week's posts. 新关注 is the total from follow notifications.
+- Stats (发帖 / 获赞 / 转发 / 回复) are X's own counters summed over the week's posts. 新关注 is the total from follow notifications. The poster puts four of them in the corners, with 发帖 in the subtitle. The story video shows all five in a row.
+- Video: a radar sweep circles the dial once (one turn = the week). Bars grow and stars appear as it passes, then new followers ripple out onto the halo, and it closes with 「谢谢你们，照亮了我的一周」.
 
 ## Files
 

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "x-circle-agent-skill": {
+      "source": ".",
+      "sourceType": "local",
+      "computedHash": "70d7bd890a175a7eb163fd482c52497a387960df9e98d8ed5f18464d09160701"
+    }
+  }
+}

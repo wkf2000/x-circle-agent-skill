@@ -194,7 +194,8 @@ async function inlineAvatars(model) {
   const worker = async () => { for (let t; (t = queue.shift());) t.avatarData = t.avatarData || await get(t.avatar); };
   await Promise.all(Array.from({ length: 8 }, worker));
   const missing = targets.filter((t) => t.avatar && !t.avatarData).length;
-  if (missing) console.warn(`warning: ${missing} avatar(s) could not be downloaded; using initials instead`);
+  if (missing) console.warn(`warning: ${missing} of ${targets.length} avatar(s) could not be downloaded; using initials instead.` +
+    (missing > targets.length / 2 ? ' Most failed, so the network is probably blocked (e.g. a sandbox): re-run with network access for real photos.' : ''));
 }
 
 // ---------- browser ----------
@@ -206,15 +207,21 @@ async function launch() {
   const tries = [];
   if (process.env.CHROME_PATH) tries.push({ executablePath: process.env.CHROME_PATH });
   tries.push({ channel: 'chrome' }, { channel: 'msedge' }, { channel: 'chromium' }, {});
-  let last;
+  const missing = /Executable doesn't exist|is not found|not installed|ENOENT|distribution .* is not found/i;
+  let crashed;
   for (const o of tries) {
-    try { return await chromium.launch({ headless: true, ...o }); } catch (e) { last = e; }
+    // --disable-dev-shm-usage: Linux containers often have a tiny /dev/shm, which crashes Chrome
+    try { return await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'], ...o }); } catch (e) { if (!missing.test(e.message)) crashed ||= e; }
   }
-  throw new Error(`No Chrome/Chromium found (${last?.message?.split('\n')[0]}). Install Google Chrome, set CHROME_PATH, or run: npx playwright install chromium`);
+  if (crashed) throw new Error(`Chrome was found but failed to start: ${crashed.message.split('\n')[0]}\n${SANDBOX_HINT}`);
+  throw new Error('No Chrome/Chromium found. Install Google Chrome, set CHROME_PATH, or run: npx playwright install chromium');
 }
+const SANDBOX_HINT = 'If your agent runs commands in a sandbox (Codex and some other harnesses do), run this render command again with full permissions / outside the sandbox. Chrome cannot run inside it.';
+const crashy = (e) => /Target crashed|crash|has been closed|Browser closed|Protocol error/i.test(e?.message || '');
 
 async function openStage(browser, model, layout, scale) {
   const page = await browser.newPage({ viewport: { width: 1080, height: layout === 'story' ? 1920 : 1350 }, deviceScaleFactor: scale });
+  page.on('crash', () => console.error('error: the render page crashed (Chrome ran out of memory or was killed).'));
   await page.goto(pathToFileURL(path.join(HERE, 'template.html')).href);
   await page.evaluate(() => document.fonts.ready);
   const info = await page.evaluate(([m, l]) => window.XC.build(m, l), [model, layout]);
@@ -262,14 +269,22 @@ async function renderVideo(browser, model, file, music) {
     ffmpeg.on('close', (code) => (code === 0 ? resolve() : reject(new Error('ffmpeg exited with code ' + code))));
   });
   const frames = Math.round(info.duration * FPS);
-  for (let f = 0; f < frames; f++) {
-    await page.evaluate((t) => window.XC.frame(t), f / FPS);
-    const jpg = await page.screenshot({ type: 'jpeg', quality: 92 });
-    if (!ffmpeg.stdin.write(jpg)) await new Promise((r) => ffmpeg.stdin.once('drain', r));
-    if (f % FPS === 0) process.stdout.write(`\rvideo ${Math.round((f / frames) * 100)}%`);
+  try {
+    for (let f = 0; f < frames; f++) {
+      await page.evaluate((t) => window.XC.frame(t), f / FPS);
+      const jpg = await page.screenshot({ type: 'jpeg', quality: 92 });
+      if (!ffmpeg.stdin.write(jpg)) await new Promise((r) => ffmpeg.stdin.once('drain', r));
+      if (f % FPS === 0) process.stdout.write(`\rvideo ${Math.round((f / frames) * 100)}%`);
+    }
+    ffmpeg.stdin.end();
+    await exited;
+  } catch (e) {
+    ffmpeg.kill('SIGKILL'); // never leave ffmpeg waiting on a pipe that will not finish
+    await rm(file, { force: true });
+    throw e;
+  } finally {
+    if (wav) await rm(wav, { force: true });
   }
-  ffmpeg.stdin.end();
-  try { await exited; } finally { if (wav) await rm(wav, { force: true }); }
   process.stdout.write('\rvideo 100%\n');
   await page.close();
 }
@@ -306,5 +321,5 @@ async function main() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch((e) => { console.error('error: ' + e.message); process.exit(1); });
+  main().catch((e) => { console.error('error: ' + e.message + (crashy(e) ? '\n' + SANDBOX_HINT : '')); process.exit(1); });
 }

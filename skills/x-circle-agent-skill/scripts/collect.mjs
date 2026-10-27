@@ -10,14 +10,22 @@
 //   node collect.mjs export --out <dir>                    writes <dir>/data.json
 //
 // Every command prints one JSON line. Its "do" field says what the agent does next:
-// "goto" (open "next"), "scroll" (scroll about one screen, then extract again), "export".
+//   "goto"    open "next", then extract
+//   "scroll"  scroll down about one screen, then extract
+//   "extract" extract again without scrolling (the last answer was split to keep it small)
+//   "back"    scroll up about half a screen, then extract (the last scroll jumped past items)
+//   "export"  everything is collected
+// Extract with the `opts` it prints, when there is one.
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DAYS = 7;
-const STALE_MS = 6 * 3600e3; // a collection older than this starts fresh
+const STALE_MS = 6 * 3600e3; // an unfinished collection older than this starts fresh
+const AUTO_SCROLL = 8;       // screens per extract in auto-scroll mode
+const MAX_RUNS = { manual: 60, auto: 10 }; // extracts per page before it is reported as cut short
+const MAX_MY_REPLIES = 300;  // my replies only feed my active hours; heavy repliers would otherwise take dozens of extracts
 const WEIGHT = { like: 1, repost: 2, mention: 2, reply: 3, quote: 3 };
 const TYPES = ['like', 'repost', 'reply', 'quote', 'mention'];
 const SHOWN = 52 + 12, HALO = 24 + 8; // render.mjs ring sizes, plus spares for render --exclude
@@ -67,7 +75,7 @@ function fresh(tz) {
     v: 3, createdAt: now, start: new Date(now - DAYS * 864e5).toISOString(), end: new Date(now).toISOString(),
     tz: tz || Intl.DateTimeFormat().resolvedOptions().timeZone,
     me: null, auto: false, users: {}, posts: {}, myReplies: {}, interactions: {}, follows: {}, followGroups: {},
-    pages: {}, visited: {}, notifOldest: null,
+    pages: {}, visited: {}, short: {}, notifOldest: null,
   };
 }
 
@@ -78,7 +86,12 @@ function merge(S, P) {
   if (!S.me) S.me = { handle: P.me };
   const me = S.me.handle.toLowerCase();
   if (P.me.toLowerCase() !== me) throw new Error(`This browser is logged in as @${P.me}, but this collection is for @${S.me.handle}. Run start with --fresh to switch accounts.`);
-  if (P.scrolled) S.auto = true;
+  const n = P.n || [];
+  if (n.length && (n[0] !== (P.tw || []).length || n[1] !== (P.cells || []).length || n[2] !== (P.notes || []).length)) {
+    throw new Error('The payload lost items on the way (the counts in "n" do not match). Pass the object from extract.js unchanged; extract again.');
+  }
+  S.auto = !!P.scrolled;
+  S.short ||= {};
   const startMs = Date.parse(S.start), now = P.now || Date.now();
   const inRange = (iso) => iso && Date.parse(iso) >= startMs;
   const lower = P.path.replace(/\/$/, '').toLowerCase();
@@ -105,7 +118,7 @@ function merge(S, P) {
     const repliesTab = lower.endsWith('/with_replies');
     page = repliesTab ? 'my-replies' : 'my-posts';
     const [name, avatar, followers] = P.prof || [];
-    if (name) S.me.name = name;
+    if (name) S.me.name = name.replace(new RegExp('\\s*@' + S.me.handle + '$', 'i'), '').trim() || S.me.name; // while loading, X runs the name and @handle together
     if (avatar) S.me.avatar = avatarUrl(avatar);
     if (followers) S.me.followers = followers;
     for (const t of tweets) {
@@ -186,30 +199,49 @@ function merge(S, P) {
     }
   } else {
     // Any other page (e.g. home) only tells us who is logged in.
-    return { page: 'other', added: 0, pageDone: true };
+    return { page: 'other', added: 0, pageDone: true, do: null };
   }
 
-  // A page is finished when it reaches past the week, stops yielding new items, is rate-limited,
-  // or uses up its budget of extracts.
-  const st = S.pages[lower] ||= { runs: 0, idle: 0, blocked: 0, older: [], after: {} };
+  // When is a page finished? When it reaches past the week, or nothing new appears although the page
+  // is scrolled to the bottom. A scroll that did not move the page, or X still loading, never ends it.
+  const st = S.pages[lower] ||= { runs: 0, idle: 0, stuck: 0, blocked: 0, older: [], after: {} };
   st.runs++;
-  st.idle = added ? 0 : st.idle + 1;
+  st.waiting = false;
+  const moved = st.y == null || P.y !== st.y || P.h !== st.h;
+  st.y = P.y; st.h = P.h;
+  st.idle = added || P.more ? 0 : st.idle + 1;
+  st.stuck = !added && !moved && !P.end ? st.stuck + 1 : 0;
+  // X sometimes takes 10+ seconds to load the next batch, so it takes two empty extracts at the bottom to call it the end
+  st.atEnd = !added && !P.more && P.end && !P.loading ? (st.atEnd || 0) + 1 : 0;
   st.blocked = P.blocked && !added ? st.blocked + 1 : 0;
   st.older = [...new Set([...st.older, ...older])].slice(0, 10);
-  // the cursor for the next extract: the last item of each list (posts, people, notification rows)
-  const lastOf = { tw: P.tw?.at(-1)?.[0], cells: P.cells?.at(-1)?.[0].toLowerCase(), notes: P.notes?.length ? P.notes.at(-1)[0].slice(0, 40) + '|' + P.notes.at(-1)[2] : null };
-  for (const k in lastOf) if (lastOf[k]) st.after[k] = lastOf[k];
-  const notif = page === 'notifications';
-  const budget = P.scrolled ? (notif ? 8 : 3) : (notif ? 30 : page === 'my-posts' || page === 'my-replies' ? 25 : 12);
-  // nothing new after a scroll means the end, unless X was still loading or the page just opened
-  const settled = P.scrolled || (st.runs > 1 && !P.loading);
-  const done = stop || st.older.length >= 3 || st.idle >= (settled ? 1 : 2) || st.blocked >= 2 || st.runs >= budget;
-  if (done) S.visited[lower] = 1;
+  // the cursor for the next extract: the last item of each list. After a jump ("lost") keep the old
+  // one, so scrolling back up recovers the skipped items.
+  if (!P.lost) {
+    const lastOf = { tw: P.tw?.at(-1)?.[0], cells: P.cells?.at(-1)?.[0].toLowerCase(), notes: P.notes?.length ? P.notes.at(-1)[0].slice(0, 40) + '|' + P.notes.at(-1)[2] : null };
+    for (const k in lastOf) if (lastOf[k]) st.after[k] = lastOf[k];
+  }
+  const maxRuns = MAX_RUNS[S.auto ? 'auto' : 'manual'];
+  let next = 'scroll', note;
+  if (page === 'my-replies' && Object.keys(S.myReplies).length >= MAX_MY_REPLIES) { next = 'done'; S.short[lower] = `stopped at ${MAX_MY_REPLIES} of your replies (they only feed your active hours)`; }
+  else if (stop || st.older.length >= 3) next = 'done';
+  else if (st.blocked >= 2) {
+    // rate-limited: try again once after every other page, then give up on it
+    if (!st.retried) { st.retried = true; st.waiting = true; st.blocked = 0; next = 'later'; note = 'X is rate-limiting this page. Moving on; it comes back once at the end.'; }
+    else { next = 'done'; S.short[lower] = 'rate-limited'; note = 'X is still rate-limiting this page. Kept what loaded.'; }
+  } else if (P.more) next = 'extract';
+  else if (P.lost) { next = 'back'; note = 'The scroll jumped past some items. Scroll up about half a screen and extract again, then scroll in smaller steps.'; }
+  else if (st.runs > 1 && (st.atEnd >= 2 || (S.auto && st.idle >= 3))) next = 'done';
+  else if (st.atEnd === 1) note = 'At the bottom with nothing new yet. X can take 10 seconds or more to load the next batch: wait about 5 seconds' + (S.auto ? '' : ', scroll up a little and back down') + ', then extract again.';
+  else if (st.idle >= 6) { next = 'done'; S.short[lower] = 'nothing new after 6 extracts'; }
+  else if (st.stuck >= 2) note = 'The page did not move. Click an empty spot in the middle column (not a link or button), then press PageDown or scroll with the mouse wheel over the middle column.';
+  else if (P.blocked) note = 'X shows a "Retry" button. Click it once, wait a few seconds, then extract again.';
+  if (next !== 'done' && next !== 'later' && st.runs >= maxRuns) { next = 'done'; S.short[lower] = `stopped after ${st.runs} extracts`; }
+  if (next === 'done') S.visited[lower] = 1;
   return {
-    page, added, pageDone: done,
-    ...(st.blocked >= 2 ? { blocked: 'X stopped loading this timeline (rate limit). Kept what loaded; moving on.' } : P.blocked ? { blocked: 'X shows a "Retry" button. Click it once, wait a few seconds, then extract again.' } : {}),
-    ...(P.lost ? { warn: 'The page no longer shows where the last extract ended, so some items may be skipped. Scroll by a smaller step (about one screen).' } : {}),
-    ...(done || P.scrolled ? {} : { opts: `{ scroll: 0, after: ${JSON.stringify(Object.values(st.after))} }` }),
+    page, added, pageDone: next === 'done', do: next === 'done' || next === 'later' ? null : next,
+    ...(note ? { note } : {}),
+    ...(next === 'done' || next === 'later' ? {} : { opts: `{ scroll: ${S.auto ? AUTO_SCROLL : 0}, after: ${JSON.stringify(Object.values(st.after))} }` }),
   };
 }
 
@@ -230,16 +262,18 @@ function todo(S) {
     if (p.likes > 0) want(base + '/likes');
     if (p.reposts > 0) { want(base + '/retweets'); want(base + '/quotes'); }
   });
-  return list;
+  // pages X rate-limited go last
+  const waiting = (u) => !!S.pages[new URL(u).pathname.toLowerCase()]?.waiting;
+  return [...list.filter((u) => !waiting(u)), ...list.filter(waiting)];
 }
 function status(S, extra = {}) {
   const list = todo(S);
   const followTotal = Object.values(S.followGroups).reduce((a, b) => a + b, 0);
-  const pageOpen = extra.pageDone === false;
+  const stay = !!extra.do;
   return {
     ok: true, ...extra,
-    do: pageOpen ? 'scroll' : list.length ? 'goto' : 'export',
-    next: pageOpen ? undefined : list[0],
+    do: stay ? extra.do : list.length ? 'goto' : 'export',
+    next: stay ? undefined : list[0],
     todo: list.length,
     totals: {
       posts: Object.keys(S.posts).length, myReplies: Object.keys(S.myReplies).length,
@@ -300,9 +334,13 @@ async function readPayload(file) {
     let s = ''; process.stdin.setEncoding('utf8');
     process.stdin.on('data', (d) => { s += d; }).on('end', () => resolve(s)).on('error', reject);
   });
-  let p = JSON.parse(raw.trim());
-  if (typeof p === 'string') p = JSON.parse(p); // some tools hand back the object as a JSON string
-  return p;
+  try {
+    let p = JSON.parse(raw.trim());
+    if (typeof p === 'string') p = JSON.parse(p); // some tools hand back the object as a JSON string
+    return p;
+  } catch {
+    throw new Error('The payload is not complete JSON, probably cut off by the browser tool or while copying. Extract again and pass the whole object unchanged (answers are kept under 8 KB).');
+  }
 }
 
 async function main() {
@@ -318,9 +356,11 @@ async function main() {
   await mkdir(out, { recursive: true });
   let S, result;
   if (cmd === 'start') {
+    // resume an interrupted collection (e.g. the browser crashed); a finished or old one starts over
     S = existsSync(stateFile(out)) && !argv.includes('--fresh') ? await load(out) : null;
-    if (!S || Date.now() - S.createdAt > STALE_MS) S = fresh(opt('--tz'));
-    result = status(S, { resumed: !!S.me });
+    const resume = S && S.me && Date.now() - S.createdAt < STALE_MS && todo(S).length > 0;
+    if (!resume) S = fresh(opt('--tz'));
+    result = status(S, { resumed: !!resume, extractOpts: `{ scroll: 0 }  (or { scroll: ${AUTO_SCROLL} } if your JavaScript tool may scroll the page)` });
   } else if (cmd === 'add') {
     S = await load(out);
     result = status(S, merge(S, await readPayload(positional[0])));
@@ -330,14 +370,23 @@ async function main() {
   } else if (cmd === 'skip') {
     S = await load(out);
     const u = new URL(positional[0], 'https://x.com');
-    S.visited[u.pathname.replace(/\/$/, '').toLowerCase()] = 1;
+    const key = u.pathname.replace(/\/$/, '').toLowerCase();
+    S.visited[key] = 1;
+    (S.short ||= {})[key] = 'skipped';
     result = status(S, { skipped: u.pathname });
   } else if (cmd === 'export') {
     S = await load(out);
     const data = exportData(S);
     const file = path.join(out, 'data.json');
     await writeFile(file, JSON.stringify(data));
-    result = { ok: true, wrote: file, people: data.people.length, posts: data.posts.length, ...status(S).totals };
+    const left = todo(S);
+    result = {
+      ok: true, wrote: file, people: data.people.length, posts: data.posts.length, ...status(S).totals,
+      // tell the user about gaps: pages not visited, pages cut short, how far back notifications reached
+      ...(left.length ? { unfinished: left } : {}),
+      ...(Object.keys(S.short || {}).length ? { cutShort: S.short } : {}),
+      notificationsReachBack: S.notifOldest,
+    };
   } else {
     throw new Error('unknown command: ' + cmd);
   }

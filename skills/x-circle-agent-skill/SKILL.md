@@ -36,25 +36,36 @@ This skill is **read-only**. Only navigate, scroll and run `extract.js`. Never c
 
 The browser only *reads*. Everything else (progress, de-duplication, which page is next) lives on disk, in `<out>/collect-state.json`, and is handled by `SKILL_DIR/scripts/collect.mjs`. Nothing is written to x.com's storage. Every `collect.mjs` command prints one JSON line. Its `do` field tells you what to do next.
 
-1. **Start:** `node "SKILL_DIR/scripts/collect.mjs" start --out "<out>"`. Add `--fresh` to discard an earlier run less than 6 hours old (by default it is resumed). The time zone defaults to this machine's. Override it with `--tz Asia/Shanghai`.
-2. **Loop** until `do` is `"export"`:
-   - `"goto"` → open `next` in the browser, wait about 2 seconds, then extract.
-   - `"scroll"` → scroll down about one screen (one `PageDown`, or a mouse-wheel scroll of similar size), wait about 1.5 seconds, then extract.
-   - **Extract:** read `SKILL_DIR/scripts/browser/extract.js` once and keep its text. Pass the whole file to the browser's JavaScript tool. Its last line is `})({ scroll: 0 })`. Replace `{ scroll: 0 }` with the `opts` string from the last `collect.mjs` output, if it gave one, so that only new items come back. If the tool wants a function rather than an expression, wrap it as `() => <file text>`.
+1. **Start:** `node "SKILL_DIR/scripts/collect.mjs" start --out "<out>"`. An interrupted collection (e.g. the browser crashed) from the last 6 hours is resumed automatically. A finished or older one starts over. `--fresh` forces a new start. The time zone defaults to this machine's. Override it with `--tz Asia/Shanghai`.
+2. **Loop.** Do what `do` says, every time, until it is `"export"`. Don't stop early: an unfinished page means missing friends on the map.
+
+   | `do` | Then |
+   |---|---|
+   | `"goto"` | open `next`, wait about 2 seconds, extract |
+   | `"scroll"` | scroll down about one screen (`PageDown`, or a mouse-wheel scroll over the middle column), wait about 1.5 seconds, extract |
+   | `"extract"` | extract again right away, without scrolling. The last answer was split to stay small. |
+   | `"back"` | scroll **up** about half a screen, extract. The last scroll jumped past some items. Use smaller steps from now on. |
+
+   - **Extract:** read `SKILL_DIR/scripts/browser/extract.js` once and keep its text. Pass the whole file to the browser's JavaScript tool, with its last line `})({ scroll: 0 })` changed to the `opts` from the last `collect.mjs` output (e.g. `})({ scroll: 0, after: ["…"] })`). If the tool wants a function rather than an expression, wrap it as `() => <file text>`.
    - **Add** the returned object, unchanged, to the state:
      ```bash
      node "SKILL_DIR/scripts/collect.mjs" add --out "<out>" <<'XC_PAYLOAD'
      <the JSON object extract.js returned>
      XC_PAYLOAD
      ```
-     Alternatively, write it to a file and pass the path after `--out "<out>"`.
-   - `warn` means items were probably skipped. Scroll by smaller steps from then on. `blocked` means X is rate-limiting that page. Follow its text (click Retry once, or move on). If a page will not load at all, run `collect.mjs skip --out "<out>" <url>`.
+     Alternatively, write it to a file and pass the path after `--out "<out>"`. Answers are kept under 8 KB. If `add` says the payload is incomplete, extract again rather than editing it.
+   - Read `note` when there is one, and follow it. For example, it may say the page did not move (click an empty spot in the middle column first, then scroll), or that X shows a Retry button (click it once). X rate-limiting a page is handled for you: it is retried at the end.
+   - If a page will not load at all, run `collect.mjs skip --out "<out>" <url>`.
    - Keep the user posted in one short line every few pages (e.g. "已收集 8/20 个页面，找到 140 位朋友"), using `todo` and `totals`.
-3. **Export:** `node "SKILL_DIR/scripts/collect.mjs" export --out "<out>"` writes `<out>/data.json`.
+3. **Export:** `node "SKILL_DIR/scripts/collect.mjs" export --out "<out>"` writes `<out>/data.json`. Its output lists any gaps: `unfinished` pages, pages `cutShort` (with the reason), and `notificationsReachBack`, the oldest notification seen. Mention real gaps to the user in one line.
 
-**Faster, where allowed:** if the browser's JavaScript tool can await async code and lets scripts scroll the page (Claude Code's tools can), use `{ scroll: 12 }` instead. `extract.js` then scrolls up to 12 screens itself and returns everything it saw. In this mode, skip the separate scroll step and the `opts` string. Run it again whenever `do` is `"scroll"`. If the tool rejects async code or the page does not move, go back to `{ scroll: 0 }`.
+**If the browser crashes** (the tab dies, or the whole browser), nothing is lost. Progress is on disk. Reopen the browser, run `start` again (it resumes), and continue the loop. X is memory-hungry, so if the tab gets slow, reload it before the next `goto`.
 
-Expect roughly 15–30 pages for an active account. Each page takes 1–3 extracts in auto-scroll mode, or a few more when scrolling by hand.
+**Faster, where allowed:** if the browser's JavaScript tool can await async code and lets scripts scroll the page (Claude Code's tools can), start with `{ scroll: 8 }`. `extract.js` then scrolls up to 8 screens itself, and `collect.mjs` keeps printing `opts` with `scroll: 8`. Skip your own scroll step: on `"scroll"`, just extract again. If the tool rejects async code or the page does not move, extract with `{ scroll: 0 }` instead, and the next `opts` follow.
+
+If the browser tool can set the window size, make it tall (e.g. 1200×2400). Each screen then holds more items, so fewer extracts are needed.
+
+Expect roughly 15–30 pages for an active account. Each page takes 1–3 extracts in auto-scroll mode, or several more when scrolling by hand.
 
 What each page contributes (`extract.js` and `collect.mjs` detect the page from its URL):
 
@@ -77,7 +88,7 @@ node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>"            #
 node "SKILL_DIR/scripts/render.mjs" "<out>/data.json" --out "<out>" --video    # image + video (~30s to render)
 ```
 
-Chrome is found automatically. Set `CHROME_PATH` if it lives elsewhere, or run `npx playwright install chromium`.
+Chrome is found automatically. Set `CHROME_PATH` if it lives elsewhere, or run `npx playwright install chromium`. Rendering starts its own headless Chrome and downloads avatars. If the harness runs commands in a sandbox (Codex does), it fails with a Chrome start/crash error or with avatars falling back to initials. Re-run the render command with the harness's full permissions / outside the sandbox.
 
 **Customizing.** Use the defaults unless the user asks for something. Turn what they say into these flags and re-render, which takes seconds since no re-collecting is needed:
 

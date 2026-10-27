@@ -1,2 +1,5 @@
 node_modules/
 x-universe/
+.claude/settings.local.json
+.DS_Store
+.env
